@@ -1,0 +1,54 @@
+#!/usr/bin/perl
+
+my $interval = 5;
+
+my %req_by_srv;
+my @servers; # servers in request order
+my $chunk_begin = 1;
+
+sub print_reqs
+{
+    foreach my $srv (@servers)
+    {
+	my $n = @{$req_by_srv{$srv}};
+	if ($srv =~ m|(.*):(.*)|)
+	{
+	    my ($h, $p) = ($1, $2);
+	    printf("%30s:%-5s [$n]\n", $h, $p);
+	}
+	else
+	{ printf("%30s       [$n]\n", $srv); }
+#	foreach my $url (@{$req_by_srv{$srv}})
+#	{ print "  $url\n"; }
+    }
+    print "\n";
+
+    %req_by_srv = ();
+    @servers = ();
+    $chunk_begin = 1;
+}
+$SIG{ALRM} = sub { print_reqs(); };
+
+while (my $s = <STDIN>)
+{
+    if ($s =~ m/(.*)\|(.*)/)
+    {
+	my ($srv, $url) = ($1, $2);
+	if (!$req_by_srv{$srv})
+	{ push(@servers, $srv); }
+	push(@{$req_by_srv{$srv}}, $url);
+
+	if ($chunk_begin)
+	{
+	    $chunk_begin = 0;
+	    alarm $interval;
+	}
+	next;
+    }
+    
+    print $s;
+}
+
+# print buffered requests
+alarm 0;
+print_reqs();

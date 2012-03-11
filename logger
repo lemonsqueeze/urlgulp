@@ -1,4 +1,4 @@
 #!/bin/bash
 
-./dump_non_http &
-./dump_http_requests
+ ( exec ./dump_non_http & exec ./dump_http_requests ) | ./request_summary
+#( ./dump_non_http & ./dump_http_requests ) | cat 

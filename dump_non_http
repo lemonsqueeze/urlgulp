@@ -2,6 +2,9 @@
 # TODO: log udp traffic
 # TODO: log ipv6 traffic
 
+# Turn off buffering
+$|=1;
+
 my %dns_req;
 my %rev_dns;
 my $pcap_filter = "udp port 53 or (not tcp port 80 and tcp[tcpflags] = tcp-syn)";
@@ -38,7 +41,6 @@ while (my $s = <IN>)
 
     # successful dns reply
     # TODO: handle answers with several ips
-# 74.125.230.229
     if ($s =~ m|[0-9.]*\.53 > .*: ([0-9]*) [0-9]+/[0-9]+/[0-9]+( .*)|)
     {
 	my ($reqn, $ans) = ($1, $2);
@@ -74,7 +76,7 @@ while (my $s = <IN>)
 	my ($ip, $port) = ($1, $2);
 	my $host = $ip;
 	$host = $rev_dns{$ip} if ($rev_dns{$ip} ne "");
-#	printf("%30s:%s [???]\n", $host, $port);
+	printf("%s:%s|???\n", $host, $port);
 
 	next;
     }

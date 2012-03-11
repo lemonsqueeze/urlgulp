@@ -1,28 +1,14 @@
 #!/usr/bin/perl
 
+# Turn off buffering
+$|=1;
+
 my $interval = 5;
 my $cmd = "urlsnarf -n";
 
 my %req_by_srv;
 my @servers; # servers in request order
 my $chunk_begin = 1;
-
-sub print_reqs
-{
-    foreach my $srv (@servers)
-    {
-	my $n = @{$req_by_srv{$srv}};
-	printf("%30s [$n]\n", $srv);
-#	foreach my $url (@{$req_by_srv{$srv}})
-#	{ print "  $url\n"; }
-    }
-    print "\n";
-
-    %req_by_srv = ();
-    @servers = ();
-    $chunk_begin = 1;
-}
-$SIG{ALRM} = sub { print_reqs(); };
 
 open(IN, "exec $cmd |");
 while (my $s = <IN>)
@@ -35,24 +21,10 @@ while (my $s = <IN>)
 	$s =~ m|"POST http://([^/]*)(/[^ ]*) HTTP|)
     {
 	my ($srv, $url) = ($1, $2);
-	if (!$req_by_srv{$srv})
-	{ push(@servers, $srv); }
-	push(@{$req_by_srv{$srv}}, $url);
-
-	if ($chunk_begin)
-	{
-	    $chunk_begin = 0;
-	    alarm $interval;
-	}
+	printf("%s|%s\n", $srv, $url);
 	next;
     }
-
-
-
     
     print $s;
 }
 
-# print buffered requests
-alarm 0;
-print_reqs();
