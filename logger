@@ -1,2 +1,4 @@
 #!/bin/bash
- ./dump_tcp_syn  | ./request_summary
+
+./dump_non_http &
+./dump_http_requests
