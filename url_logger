@@ -1,0 +1,163 @@
+#!/usr/bin/perl
+
+# Turn off buffering on stdout
+$|=1;
+
+##############################################################
+# http dump
+
+my $cmd1 = "urlsnarf -n";
+
+##############################################################
+# non http dump
+# TODO: log udp traffic
+# TODO: log ipv6 traffic
+
+my $pcap_filter = "udp port 53 or (not tcp port 80 and tcp[tcpflags] = tcp-syn)";
+my $cmd2 ="tcpdump -s 400 -l -n -i eth0 '$pcap_filter'"; 
+
+my %dns_req;
+my %rev_dns;
+
+##############################################################
+# summary display
+
+my $interval = 5;
+
+my %req_by_srv;
+my @servers; # servers in request order
+my $chunk_begin = 1;
+
+sub print_reqs
+{
+    foreach my $srv (@servers)
+    {
+	my $n = @{$req_by_srv{$srv}};
+	if ($srv =~ m|(.*):(.*)|)
+	{
+	    my ($h, $p) = ($1, $2);
+	    printf("%30s:%-5s [$n]\n", $h, $p);
+	}
+	else
+	{ printf("%30s       [$n]\n", $srv); }
+#	foreach my $url (@{$req_by_srv{$srv}})
+#	{ print "  $url\n"; }
+    }
+    print "\n";
+
+    %req_by_srv = ();
+    @servers = ();
+    $chunk_begin = 1;
+}
+$SIG{ALRM} = sub { print_reqs(); };
+
+sub add_request
+{
+    my ($srv, $url) = @_;
+    if (!$req_by_srv{$srv})
+    { push(@servers, $srv); }
+    push(@{$req_by_srv{$srv}}, $url);
+    
+    if ($chunk_begin)
+    {
+	$chunk_begin = 0;
+	alarm $interval;
+    }
+}
+
+##############################################################
+
+# what a hack ... =)
+open(IN, " $cmd2 & exec $cmd1 | "); 
+
+while (my $s = <IN>)
+{
+    ##############################################################
+    # http dump
+
+    # 192.168.1.102 - - [11/Mar/2012:15:24:15 +0100] "GET http://portail.free.fr/im_zapette/mini_17390.jpg HTTP/1.1" - - "http://portail.free.fr/" "Opera/9.80 (X11; Linux i686; U; en) Presto/2.9.168 Version/11.50"
+    # 192.168.1.102 - - [11/Mar/2012:15:21:52 +0100] "POST http://www.javascript-coder.com/files/htm-form-tutorial/html-form-tutorial-example-1.html HTTP/1.1" - - "http://www.javascript-coder.com/files/htm-form-tutorial/html-form-tutorial-example-1.html" "Opera/9.80 (X11; Linux i686; U; en) Presto/2.9.168 Version/11.50"
+    if ($s =~ m|"GET http://([^/]*)(/[^ ]*) HTTP| ||
+	$s =~ m|"POST http://([^/]*)(/[^ ]*) HTTP|)
+    {
+	my ($srv, $url) = ($1, $2);
+	#printf("%s|%s\n", $srv, $url);
+	add_request($srv,$url);
+	next;
+    }
+
+    ##############################################################
+    # non http dump
+
+    if ($s =~ m/\[\|([a-z]*)\]/)    
+    {
+	my $proto = $1;
+	print "WARNING: tcpdump: truncated packet ($proto), increase -s\n";
+    }
+
+
+    # dns:
+    # 13:23:11.498652 IP 192.168.1.102.37199 > 192.168.1.1.53: 28106+ A? imp.free.fr. (29)
+    # 13:23:11.527717 IP 192.168.1.1.53 > 192.168.1.102.37199: 28106 1/0/0 A 212.27.48.1 (45)
+
+    # 14:07:06.541093 IP 192.168.1.102.45903 > 192.168.1.1.53: 36366+ A? yahoo.com. (27)
+    # 14:07:06.542041 IP 192.168.1.1.53 > 192.168.1.102.45903: 36366 3/0/0 A 98.139.183.24, A 98.139.127.62, A 209.191.122.70 (75)
+    # 14:07:06.863547 IP 192.168.1.102.48173 > 192.168.1.1.53: 38339+ A? www.yahoo.com. (31)
+    # 14:07:06.892851 IP 192.168.1.1.53 > 192.168.1.102.48173: 38339 4/0/0 CNAME fp3.wg1.b.yahoo.com., CNAME eu-fp3-lfb.wa1.b.yahoo.com., CNAME eu-fp3.wa1.b.yahoo.com., A 87.248.112.181 (121)
+
+    # dns request
+    if ($s =~ m|> [0-9.]*\.53: ([0-9]*)\+ A\? (.*)\.|)    
+    {
+	my ($reqn, $host) = ($1, $2);
+	$dns_req{$reqn} = $host;
+	next;
+    }
+
+    # successful dns reply
+    # TODO: handle answers with several ips
+    if ($s =~ m|[0-9.]*\.53 > .*: ([0-9]*) [0-9]+/[0-9]+/[0-9]+( .*)|)
+    {
+	my ($reqn, $ans) = ($1, $2);
+	my $host = $dns_req{$reqn};
+	my @tab = split(/,/, $ans);
+	# my @ips;
+	foreach my $a (@tab)
+	{
+	    if ($a =~ m| A ([0-9.]*)|)
+	    {
+		my $ip = $1;
+		$rev_dns{$ip} = $host;
+		# push(@ips, $ip);
+	    }
+	}
+	# print "$host -> @ips\n";
+	next;
+    }
+
+    # ipv6 dns request
+    if ($s =~ m|> [0-9.]*\.53: ([0-9]*)\+ AAAA\? (.*)\.|)    
+    {
+	my $host = $2;
+	print "WARNING: ipv6 DNS request for $host. I'm not hanlding ipv6!\n";
+	next;
+    }
+
+    # tcp syn (ex: https):
+    # 12:48:01.297490 IP bilbo-netbook.43708 > router.https: Flags [S], seq 2842818660, win 5840, options [mss 1460,sackOK,TS val 111719333 ecr 0], length 0
+
+    if ($s =~ m|> ([0-9.]*)\.([^.]*):.*Flags|)
+    {
+	my ($ip, $port) = ($1, $2);
+	my $host = $ip;
+	$host = $rev_dns{$ip} if ($rev_dns{$ip} ne "");
+	# printf("%s:%s|???\n", $host, $port);
+	add_request("$host:$port", "???");
+
+	next;
+    }
+
+    ##############################################################
+    
+    print $s;
+}
+
