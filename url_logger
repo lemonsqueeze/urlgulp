@@ -1,5 +1,32 @@
 #!/usr/bin/perl
 
+my $print_urls = 0;
+
+# my $url_trunc_first = "tail";
+# my $url_trunc_first = "path";
+my $url_trunc_first = "balanced";
+
+%color = ( "wb" => "\033[40;37;1m", 
+	   "rb" => "\033[40;31;1m",
+	   "yb" => "\033[40;33;1m",
+	   "e" => "\033[0m");
+my $color_seq_len = 14;
+
+my $url_spc = "                    ";
+
+if ($ARGV[0] eq "-v")
+{
+    $print_urls = 1;
+    $columns = `tput cols`;
+    shift(@ARGV);
+}
+
+if ($ARGV[0] eq "-vv")
+{
+    $print_urls = 2;
+    shift(@ARGV);
+}
+
 # Turn off buffering on stdout
 $|=1;
 
@@ -14,7 +41,7 @@ my $cmd1 = "urlsnarf -n";
 # TODO: log ipv6 traffic
 
 my $pcap_filter = "udp port 53 or (not tcp port 80 and tcp[tcpflags] = tcp-syn)";
-my $cmd2 ="tcpdump -s 400 -l -n -i eth0 '$pcap_filter'"; 
+my $cmd2 ="tcpdump -s 500 -l -n -i eth0 '$pcap_filter'"; 
 
 my %dns_req;
 my %rev_dns;
@@ -28,20 +55,108 @@ my %req_by_srv;
 my @servers; # servers in request order
 my $chunk_begin = 1;
 
+sub max
+{
+    my ($a, $b) = @_;
+    return ($a < $b ? $b : $a);
+}
+
+sub get_domain
+{
+    my ($h) = @_;
+    my $i = rindex($h, ".");
+    my $j = rindex($h, ".", $i - 1);
+    if ($i - $j == 3) # .co.uk style domain
+    { $j =  rindex($h, ".", $j - 1); }
+    if ($j != -1)
+    { return substr($h, $j+1); }
+    return $h;
+}
+
+sub pretty_print_url
+{
+    my ($srv) = @_;
+    # display summary for images
+    my $images = 0, $css = 0;
+    foreach my $url (@{$req_by_srv{$srv}})
+    { 
+	if ($url =~ m/\.(png|jpg|jpeg|gif|ico)$/i)
+	{   $images++; next; }
+
+	if ($url =~ m/\.(css)$/i)
+	{   $css++; next; }
+
+	$url =~ m|^([^?&]*)/([^/?&]*)(.*)$| || die("should not happen: '$url'");
+	my ($path, $file, $tail) = ($1, $2, $3);
+	my $line = "$url_spc$url";
+
+	# truncate urls to term's width
+	if (length("$line") > $columns)
+	{
+	    # if path too long, truncate it ...
+	    if ($url_trunc_first eq "path" &&
+		length("$url_spc$path/$file$tail") > $columns)
+	    { 
+		my $len = max($columns - length("${url_spc}[..]/$file$tail"), 0);
+		$path = "[..]" . substr($path, max(length($path) - $len, 0), $len);
+	    }				   
+	    
+	    if ($url_trunc_first eq "tail" &&
+		length("$url_spc$path/$file?") > $columns)
+	    { 
+		my $len = max($columns - length("${url_spc}[..]/$file?"), 0);
+		$path = "[..]" . substr($path, max(length($path) - $len, 0), $len);
+	    }
+
+	    if ($url_trunc_first eq "balanced" &&
+		length("$url_spc$path/$file$tail") > $columns)
+	    { 
+		my $len = max($columns - length("${url_spc}[..]/$file?"), 0) / 2;
+		$path = "[..]" . substr($path, max(length($path) - $len, 0), $len);
+	    }
+
+	    # ... truncate end if needed
+	    $line = substr("$url_spc$path/$file$tail", 0, $columns);
+	}
+	# highlight file
+	$line =~ s|^([^?&]*)/([^/?&]*)(.*)$|$1/$color{wb}$2$color{e}$3|;
+	print "$line\n";
+    }
+    if ($images)
+    { printf("${url_spc}[$color{wb}images$color{e}: $images]\n"); }
+    if ($css)
+    { printf("${url_spc}[$color{wb}css$color{e}: $css]\n"); }
+}
+
+
 sub print_reqs
 {
+    my $current_domain = get_domain($servers[0]);
+
     foreach my $srv (@servers)
     {
 	my $n = @{$req_by_srv{$srv}};
+	my $port = "";
 	if ($srv =~ m|(.*):(.*)|)
 	{
-	    my ($h, $p) = ($1, $2);
-	    printf("%30s:%-5s [$n]\n", $h, $p);
+	    $srv = $1;
+	    $port = ":$2";
 	}
-	else
-	{ printf("%30s       [$n]\n", $srv); }
-#	foreach my $url (@{$req_by_srv{$srv}})
-#	{ print "  $url\n"; }
+
+	my ($color_in, $color_out) = ($color{yb}, $color{e});
+	if (get_domain($srv) ne $current_domain)
+	{ ($color_in, $color_out) = ($color{rb}, $color{e}); }	
+
+	printf("%s%30s%-6s [$n]%s\n", $color_in, $srv, $port, $color_out);
+
+	if ($print_urls == 1)
+	{ pretty_print_url($srv); }
+
+	if ($print_urls == 2)
+	{
+	    foreach my $url (@{$req_by_srv{$srv}})
+	    { printf("$url_spc%s\n", $url); }
+	}
     }
     print "\n";
 

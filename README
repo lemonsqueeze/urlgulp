@@ -1,1 +1,6 @@
-This version shows summary of tcp connections being made, (no urls yet)
+log, group and pretty print urls from http traffic on the network
+
+usage: url_logger [-v] [-vv]
+   -v:  pretty print urls
+   -vv: dump raw urls (no pretty printing or grouping)
+
