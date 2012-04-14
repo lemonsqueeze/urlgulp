@@ -1,10 +1,27 @@
 #!/usr/bin/perl
 
-my $print_urls = 0;
+###################################################
+# Default Settings
 
-#my $url_trunc_first = "tail";
-#my $url_trunc_first = "path";
-my $url_trunc_first = "balanced";
+$print_urls = 1;
+
+# $url_trunc_first = "tail";
+# $url_trunc_first = "path";
+$url_trunc_first = "balanced";
+
+$group_really_long_urls = 0;
+$really_long_thres = 100;
+
+###################################################
+
+sub usage
+{
+    print "Usage: url_logger [-qr]\n";
+    print "  -q: Quiet mode. Don't log urls, only domains.\n";
+    print "  -r: Raw mode, just dump it all. No url coloring, grouping or truncating.\n";
+    exit(1);
+}
+
 
 %color = ( "wb" => "\033[40;37;1m",  # white bold
 	   "rb" => "\033[40;31;1m",  # red bold
@@ -14,20 +31,24 @@ my $url_trunc_first = "balanced";
 	   "cb" => "\033[40;36;1m",  # cyan bold
 	   "e" => "\033[0m");
 my $color_seq_len = 14;
-
+my $columns = `tput cols`;
 my $url_spc = "                    ";
 
-if ($ARGV[0] eq "-v")
+for (; @ARGV != 0; shift(@ARGV))
 {
-    $print_urls = 1;
-    $columns = `tput cols`;
-    shift(@ARGV);
-}
+    if ($ARGV[0] eq "-q")
+    {
+	$print_urls = 0;
+	next;
+    }
+    
+    if ($ARGV[0] eq "-r")
+    {
+	$print_urls = 2;
+	next;
+    }
 
-if ($ARGV[0] eq "-vv")
-{
-    $print_urls = 2;
-    shift(@ARGV);
+    usage();
 }
 
 # Turn off buffering on stdout
@@ -88,7 +109,7 @@ my %filtered_cdns = (
 
 my $interval = 5;
 
-my %req_by_srv;
+my %req_by_host;
 my @servers; # servers in request order
 my $chunk_begin = 1;
 
@@ -116,62 +137,99 @@ sub get_domain
     return $h;
 }
 
+sub leaked_referer
+{
+    my ($host, $referer) = @_;
+    if ($referer =~ m|http://([^/]*)|)
+    {
+	my $ref_host = $1;
+	return ($ref_host ne $host);
+    }
+    return 0;
+}
+
+# Naming:
+#   url   http://www.google.com/abc/def/foo.js?abcd=efgh
+#   host         www.google.com
+#   path                       /abc/def/foo.js?abcd=efgh
+#   dir                        /abc/def
+#   file                                foo.js
+#   tail                                      ?abcd=efgh
+
 sub pretty_print_url
 {
-    my ($srv) = @_;
+    my ($host) = @_;
     # display summary for images
     my $images = 0, $css = 0;
-    foreach my $url (@{$req_by_srv{$srv}})
+    foreach my $req (@{$req_by_host{$host}})
     { 
-	if ($url =~ m/\.(png|jpg|jpeg|gif|ico)$/i)
+	my ($path, $referer, $method) = split(/\|/, $req);
+	my $leaked_ref = leaked_referer($host, $referer);
+	my $special_notice = ($leaked_ref || $method eq "POST");
+
+	my $head = (($leaked_ref ? "ref!" : "") . 
+		    ($method eq "POST" ? "post!" : "") . 
+		    $url_spc);
+	$head = sprintf("%.*s", length($url_spc), $head);
+	
+	if ($path =~ m/\.(png|jpg|jpeg|gif|ico)$/i &&
+	    !$special_notice &&
+	    ($group_really_long_urls || length($path) < $really_long_thres))
 	{   $images++; next; }
 
-	if ($url =~ m/\.(css)$/i)
+	if ($path =~ m/\.(css)$/i &&
+	    !$special_notice &&
+	    ($group_really_long_urls || length($path) < $really_long_thres))
 	{   $css++; next; }
 
-	$url =~ m|^([^?&:]*)/([^/?&:]*)(.*)$| || die("should not happen: '$url'");
-	my ($path, $file, $tail) = ($1, $2, $3);
-	my $line = "$url_spc$url";
+	$path =~ m|^([^?&:]*)/([^/?&:]*)(.*)$| || die("should not happen: '$path'");
+	my ($dir, $file, $tail) = ($1, $2, $3);
+	my $line = "$head$path";
 
 	# truncate urls to term's width
 	if (length("$line") > $columns)
 	{
-	    # if path too long, truncate it ...
+	    # if dir too long, truncate it ...
 	    if ($url_trunc_first eq "path" &&
-		length("$url_spc$path/$file$tail") > $columns)
+		length("$head$dir/$file$tail") > $columns)
 	    { 
-		my $len = max($columns - length("${url_spc}[..]/$file$tail"), 0);
-		$path = "[..]" . substr($path, max(length($path) - $len, 0), $len);
+		my $len = max($columns - length("${head}[..]/$file$tail"), 0);
+		$dir = "[..]" . substr($dir, max(length($dir) - $len, 0), $len);
 	    }				   
 	    
 	    if ($url_trunc_first eq "tail" &&
-		length("$url_spc$path/$file?") > $columns)
+		length("$head$dir/$file?") > $columns)
 	    { 
-		my $len = max($columns - length("${url_spc}[..]/$file?"), 0);
-		$path = "[..]" . substr($path, max(length($path) - $len, 0), $len);
+		my $len = max($columns - length("${head}[..]/$file?"), 0);
+		$dir = "[..]" . substr($dir, max(length($dir) - $len, 0), $len);
 	    }
 
 	    if ($url_trunc_first eq "balanced" &&
-		length("$url_spc$path/$file$tail") > $columns)
+		length("$head$dir/$file$tail") > $columns)
 	    { 
-		my $avail = max($columns - length("${url_spc}[..]/$file?"), 0);
+		my $avail = max($columns - length("${head}[..]/$file?"), 0);
 		my $tailn = min(length($tail), $avail / 2);
 		my $len = $avail - $tailn;
-		if ($len < length($path))
+		if ($len < length($dir))
 		{
-		    $path = "[..]" . substr($path, length($path) - $len, $len);
+		    $dir = "[..]" . substr($dir, length($dir) - $len, $len);
 		}
 	    }
 
 	    # ... truncate end if needed
-	    $line = substr("$url_spc$path/$file$tail", 0, $columns);
+	    $line = substr("$head$dir/$file$tail", 0, $columns);
 	}
 	# highlight file
 	my $file_color = $color{wb};
 	$file_color = $color{bb} if ($file =~ m|\.js|);
 	$line =~ s|^([^?&:]*)/([^/?&:]*)(.*)$|$1/$file_color$2$color{e}$3|;
+
+	# highlight ref! and post!
+	$line =~ s/ref!/$color{rb}ref!$color{e}/;
+	$line =~ s/post!/$color{yb}post!$color{e}/;
 	print "$line\n";
     }
+
     if ($images)
     { printf("${url_spc}[$color{wb}images$color{e}: $images]\n"); }
     if ($css)
@@ -192,15 +250,15 @@ sub dns_alias_for_other_domain
 
 sub get_dns_aliases
 {
-    my ($srv) = @_;
+    my ($host) = @_;
     my $dns_aliases = "";
-    if (dns_alias_for_other_domain($srv) ||
+    if (dns_alias_for_other_domain($host) ||
 	$print_urls == 2)
     {
-	$dns_aliases = join(", ", @{$dns_alias{$srv}});
+	$dns_aliases = join(", ", @{$dns_alias{$host}});
 	$dns_aliases = " = $dns_aliases" if ($dns_aliases ne "");
 	$dns_aliases = sprintf("%*s", $columns - 42, $dns_aliases);
-	if (dns_alias_for_other_domain($srv))
+	if (dns_alias_for_other_domain($host))
 	{ $dns_aliases = "$color{rb}$dns_aliases$color{e}"; }
     }
     return $dns_aliases;
@@ -210,36 +268,39 @@ sub print_reqs
 {
     my $current_domain = get_domain($servers[0]);
 
-    foreach my $srv (@servers)
+    foreach my $host (@servers)
     {
-	my $n = @{$req_by_srv{$srv}};
+	my $n = @{$req_by_host{$host}};
 	my $port = "";
-	if ($srv =~ m|(.*):(.*)|)
+	if ($host =~ m|(.*):(.*)|)
 	{
-	    $srv = $1;
+	    $host = $1;
 	    $port = ":$2";
 	}
 
 	# evil stuff -> red color
 	my ($color_in, $color_out) = ($color{yb}, $color{e});
-	if (get_domain($srv) ne $current_domain)
+	if (get_domain($host) ne $current_domain)
 	{ ($color_in, $color_out) = ($color{rb}, $color{e}); }	
 
-	my $s = sprintf("%30s%-6s [$n]%s", $srv, $port, get_dns_aliases($srv));
+	my $s = sprintf("%30s%-6s [$n]%s", $host, $port, get_dns_aliases($host));
 	printf("%s%s%s\n", $color_in, $s, $color_out);
 
 	if ($print_urls == 1)
-	{ pretty_print_url($srv); }
+	{ pretty_print_url($host); }
 
 	if ($print_urls == 2)
 	{
-	    foreach my $url (@{$req_by_srv{$srv}})
-	    { printf("$url_spc%s\n", $url); }
+	    foreach my $req (@{$req_by_host{$host}})
+	    { 
+		my ($path, $referer) = split(/"/, $req);
+		printf("$url_spc%s\n", $path); 
+	    }
 	}
     }
     print "\n";
 
-    %req_by_srv = ();
+    %req_by_host = ();
     @servers = ();
     $chunk_begin = 1;
 }
@@ -247,10 +308,10 @@ $SIG{ALRM} = sub { print_reqs(); };
 
 sub add_request
 {
-    my ($srv, $url) = @_;
-    if (!$req_by_srv{$srv})
-    { push(@servers, $srv); }
-    push(@{$req_by_srv{$srv}}, $url);
+    my ($host, $path, $referer, $method) = @_;
+    if (!$req_by_host{$host})
+    { push(@servers, $host); }
+    push(@{$req_by_host{$host}}, "$path|$referer|$method");
     
     if ($chunk_begin)
     {
@@ -271,12 +332,12 @@ while (my $s = <IN>)
 
     # 192.168.1.102 - - [11/Mar/2012:15:24:15 +0100] "GET http://portail.free.fr/im_zapette/mini_17390.jpg HTTP/1.1" - - "http://portail.free.fr/" "Opera/9.80 (X11; Linux i686; U; en) Presto/2.9.168 Version/11.50"
     # 192.168.1.102 - - [11/Mar/2012:15:21:52 +0100] "POST http://www.javascript-coder.com/files/htm-form-tutorial/html-form-tutorial-example-1.html HTTP/1.1" - - "http://www.javascript-coder.com/files/htm-form-tutorial/html-form-tutorial-example-1.html" "Opera/9.80 (X11; Linux i686; U; en) Presto/2.9.168 Version/11.50"
-    if ($s =~ m|"GET http://([^/]*)(/[^ ]*) HTTP| ||
-	$s =~ m|"POST http://([^/]*)(/[^ ]*) HTTP|)
+    if ($s =~ m|"(GET) http://([^/]*)(/[^ ]*) HTTP[^"]*" - - "([^"]*)"|   ||
+	$s =~ m|"(POST) http://([^/]*)(/[^ ]*) HTTP[^"]*" - - "([^"]*)"|)
     {
-	my ($srv, $url) = ($1, $2);
-	#printf("%s|%s\n", $srv, $url);
-	add_request($srv,$url);
+	my ($method, $host, $path, $referer) = ($1, $2, $3, $4);
+	#printf("%s|%s|%s\n", $host, $path, $referer, $method);
+	add_request($host, $path, $referer, $method);
 	next;
     }
 
@@ -356,7 +417,7 @@ while (my $s = <IN>)
 	my $host = $ip;
 	$host = $rev_dns{$ip} if ($rev_dns{$ip} ne "");
 	# printf("%s:%s|???\n", $host, $port);
-	add_request("$host:$port", "???");
+	add_request("$host:$port", "???", "-", "-");
 
 	next;
     }

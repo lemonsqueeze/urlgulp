@@ -1,6 +1,7 @@
-log, group and pretty print urls from http traffic on the network
+Log, group and pretty print urls from http traffic on the network
 
-usage: url_logger [-v] [-vv]
-   -v:  pretty print urls
-   -vv: dump raw urls (no pretty printing or grouping)
+
+Usage: url_logger [-qr]
+  -q: Quiet mode. Don't log urls, only domains.
+  -r: Raw mode, just dump it all. No url coloring, grouping or truncating.
 
