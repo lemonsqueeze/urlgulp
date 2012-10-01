@@ -3,6 +3,8 @@
 ###################################################
 # Default Settings
 
+$interface = "eth0";
+
 $print_urls = 1;
 
 # $url_trunc_first = "tail";
@@ -16,12 +18,11 @@ $really_long_thres = 100;
 
 sub usage
 {
-    print "Usage: url_logger [-qr]\n";
+    print "Usage: url_logger [-qr] [-i interface]\n";
     print "  -q: Quiet mode. Don't log urls, only domains.\n";
     print "  -r: Raw mode, just dump it all. No url coloring, grouping or truncating.\n";
     exit(1);
 }
-
 
 %color = ( "wb" => "\033[40;37;1m",  # white bold
 	   "rb" => "\033[40;31;1m",  # red bold
@@ -48,6 +49,13 @@ for (; @ARGV != 0; shift(@ARGV))
 	next;
     }
 
+    if ($ARGV[0] eq "-i")
+    {
+	shift(@ARGV);
+	$interface = $ARGV[0];
+	next;
+    }
+
     usage();
 }
 
@@ -57,7 +65,7 @@ $|=1;
 ##############################################################
 # http dump
 
-my $cmd1 = "urlsnarf -n";
+my $cmd1 = "urlsnarf -n -i $interface";
 #my $cmd1 = "cat testurltrunc.log";
 
 ##############################################################
@@ -66,7 +74,7 @@ my $cmd1 = "urlsnarf -n";
 # TODO: log ipv6 traffic
 
 my $pcap_filter = "udp port 53 or (not tcp port 80 and tcp[tcpflags] = tcp-syn)";
-my $cmd2 ="tcpdump -s 500 -l -n -i eth0 '$pcap_filter'"; 
+my $cmd2 ="tcpdump -s 500 -l -n -i $interface '$pcap_filter'"; 
 
 my %dns_req;
 my %rev_dns;
@@ -84,6 +92,7 @@ my %filtered_cdns = (
     "cloudfront.net" => 1,
     "cloudflare.com" => 1,
     "cotcdn.net" => 1,
+    "dnspro.org" => 1,
     "edgekey.net" => 1,
     "edgecastcdn.net" => 1,
     "edgesuite.net" => 1,

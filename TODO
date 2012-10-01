@@ -1,0 +1,23 @@
+
+- document output
+
+hard:
+- ssl traffic
+- detect tracking pictures ?
+- display proxy for proxied requests ?
+- display params for POST
+
+
+- command line options:
+  -d delay
+- check how ajax shows up
+- load/save dns tables so we can restart easily ?
+
+
+----------------------
+DONE
+
+- command line options:
+  -i iface
+- handle/display referrer ?
+- look for suspiciously long urls, whether in images, css etc

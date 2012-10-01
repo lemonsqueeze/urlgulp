@@ -1,7 +1,9 @@
+                             urlgulp
+                             =======
+
 Log, group and pretty print urls from http traffic on the network
 
-
-Usage: url_logger [-qr]
+Usage: url_logger [-qr] [-i interface]
   -q: Quiet mode. Don't log urls, only domains.
   -r: Raw mode, just dump it all. No url coloring, grouping or truncating.
 
