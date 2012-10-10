@@ -18,7 +18,7 @@ $really_long_thres = 100;
 
 sub usage
 {
-    print "Usage: url_logger [-qr] [-i interface]\n";
+    print "Usage: urlgulp [-qr] [-i interface]\n";
     print "  -q: Quiet mode. Don't log urls, only domains.\n";
     print "  -r: Raw mode, just dump it all. No url coloring, grouping or truncating.\n";
     exit(1);

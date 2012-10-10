@@ -7,3 +7,5 @@ Usage: url_logger [-qr] [-i interface]
   -q: Quiet mode. Don't log urls, only domains.
   -r: Raw mode, just dump it all. No url coloring, grouping or truncating.
 
+
+Dependencies: perl, tcpdump, urlsnarf (dsniff)
