@@ -2,13 +2,16 @@
 
 my $print_urls = 0;
 
-# my $url_trunc_first = "tail";
-# my $url_trunc_first = "path";
+#my $url_trunc_first = "tail";
+#my $url_trunc_first = "path";
 my $url_trunc_first = "balanced";
 
-%color = ( "wb" => "\033[40;37;1m", 
-	   "rb" => "\033[40;31;1m",
-	   "yb" => "\033[40;33;1m",
+%color = ( "wb" => "\033[40;37;1m",  # white bold
+	   "rb" => "\033[40;31;1m",  # red bold
+	   "yb" => "\033[40;33;1m",  # yellow bold
+	   "pb" => "\033[40;35;1m",  # purple bold
+	   "bb" => "\033[40;34;1m",  # blue bold
+	   "cb" => "\033[40;36;1m",  # cyan bold
 	   "e" => "\033[0m");
 my $color_seq_len = 14;
 
@@ -34,6 +37,7 @@ $|=1;
 # http dump
 
 my $cmd1 = "urlsnarf -n";
+#my $cmd1 = "cat testurltrunc.log";
 
 ##############################################################
 # non http dump
@@ -46,6 +50,39 @@ my $cmd2 ="tcpdump -s 500 -l -n -i eth0 '$pcap_filter'";
 my %dns_req;
 my %rev_dns;
 
+my %dns_alias;
+my %filtered_cdns = (
+    "akamai.net" => 1,
+    "akadns.net" => 1, 
+    "akamaiedge.net" => 1,
+    "bluehatnetwork.com" => 1,
+    "cachefly.net" => 1,
+    "cdngc.net" => 1,
+    "cubecdn.net" => 1,
+    "cedexis.net" => 1,
+    "cloudfront.net" => 1,
+    "cloudflare.com" => 1,
+    "cotcdn.net" => 1,
+    "edgekey.net" => 1,
+    "edgecastcdn.net" => 1,
+    "edgesuite.net" => 1,
+    "fastly.net" => 1,
+    "footprint.net" => 1,
+    "hwcdn.net" => 1,
+    "instacontent.net" => 1,
+    "internapcdn.net" => 1,
+    "llnwd.net" => 1,
+    "lxdns.com" => 1,
+    "mirror-image.net" => 1,
+    "netdna-cdn.com" => 1,
+    "panthercdn.com" => 1,
+    "simplecdn.net" => 1,
+    "swiftcdn1.com" => 1,
+    "upcache.com" => 1,
+    "voxcdn.net" => 1,
+    "yahoodns.net" => 1);
+    
+    
 ##############################################################
 # summary display
 
@@ -59,6 +96,12 @@ sub max
 {
     my ($a, $b) = @_;
     return ($a < $b ? $b : $a);
+}
+
+sub min
+{
+    my ($a, $b) = @_;
+    return ($a < $b ? $a : $b);
 }
 
 sub get_domain
@@ -86,7 +129,7 @@ sub pretty_print_url
 	if ($url =~ m/\.(css)$/i)
 	{   $css++; next; }
 
-	$url =~ m|^([^?&]*)/([^/?&]*)(.*)$| || die("should not happen: '$url'");
+	$url =~ m|^([^?&:]*)/([^/?&:]*)(.*)$| || die("should not happen: '$url'");
 	my ($path, $file, $tail) = ($1, $2, $3);
 	my $line = "$url_spc$url";
 
@@ -111,15 +154,22 @@ sub pretty_print_url
 	    if ($url_trunc_first eq "balanced" &&
 		length("$url_spc$path/$file$tail") > $columns)
 	    { 
-		my $len = max($columns - length("${url_spc}[..]/$file?"), 0) / 2;
-		$path = "[..]" . substr($path, max(length($path) - $len, 0), $len);
+		my $avail = max($columns - length("${url_spc}[..]/$file?"), 0);
+		my $tailn = min(length($tail), $avail / 2);
+		my $len = $avail - $tailn;
+		if ($len < length($path))
+		{
+		    $path = "[..]" . substr($path, length($path) - $len, $len);
+		}
 	    }
 
 	    # ... truncate end if needed
 	    $line = substr("$url_spc$path/$file$tail", 0, $columns);
 	}
 	# highlight file
-	$line =~ s|^([^?&]*)/([^/?&]*)(.*)$|$1/$color{wb}$2$color{e}$3|;
+	my $file_color = $color{wb};
+	$file_color = $color{bb} if ($file =~ m|\.js|);
+	$line =~ s|^([^?&:]*)/([^/?&:]*)(.*)$|$1/$file_color$2$color{e}$3|;
 	print "$line\n";
     }
     if ($images)
@@ -128,6 +178,33 @@ sub pretty_print_url
     { printf("${url_spc}[$color{wb}css$color{e}: $css]\n"); }
 }
 
+sub dns_alias_for_other_domain
+{
+    my ($host) = @_;
+    my $domain = get_domain($host);
+    foreach my $a (@{$dns_alias{$host}})
+    {
+	if (get_domain($a) ne $domain)
+	{ return 1; }
+    }
+    return 0;
+}
+
+sub get_dns_aliases
+{
+    my ($srv) = @_;
+    my $dns_aliases = "";
+    if (dns_alias_for_other_domain($srv) ||
+	$print_urls == 2)
+    {
+	$dns_aliases = join(", ", @{$dns_alias{$srv}});
+	$dns_aliases = " = $dns_aliases" if ($dns_aliases ne "");
+	$dns_aliases = sprintf("%*s", $columns - 42, $dns_aliases);
+	if (dns_alias_for_other_domain($srv))
+	{ $dns_aliases = "$color{rb}$dns_aliases$color{e}"; }
+    }
+    return $dns_aliases;
+}
 
 sub print_reqs
 {
@@ -143,11 +220,13 @@ sub print_reqs
 	    $port = ":$2";
 	}
 
+	# evil stuff -> red color
 	my ($color_in, $color_out) = ($color{yb}, $color{e});
 	if (get_domain($srv) ne $current_domain)
 	{ ($color_in, $color_out) = ($color{rb}, $color{e}); }	
 
-	printf("%s%30s%-6s [$n]%s\n", $color_in, $srv, $port, $color_out);
+	my $s = sprintf("%30s%-6s [$n]%s", $srv, $port, get_dns_aliases($srv));
+	printf("%s%s%s\n", $color_in, $s, $color_out);
 
 	if ($print_urls == 1)
 	{ pretty_print_url($srv); }
@@ -220,6 +299,10 @@ while (my $s = <IN>)
     # 14:07:06.863547 IP 192.168.1.102.48173 > 192.168.1.1.53: 38339+ A? www.yahoo.com. (31)
     # 14:07:06.892851 IP 192.168.1.1.53 > 192.168.1.102.48173: 38339 4/0/0 CNAME fp3.wg1.b.yahoo.com., CNAME eu-fp3-lfb.wa1.b.yahoo.com., CNAME eu-fp3.wa1.b.yahoo.com., A 87.248.112.181 (121)
 
+    # Example of DNS Alias to another Domain:
+    # 19:50:26.437890 IP 192.168.1.102.44541 > 192.168.1.1.53: 44119+ A? stats.wired.com. (33)
+    # 19:50:26.467811 IP 192.168.1.1.53 > 192.168.1.102.44541: 44119 20/3/3 CNAME condenast.112.2o7.net., A 66.235.138.18, ...
+
     # dns request
     if ($s =~ m|> [0-9.]*\.53: ([0-9]*)\+ A\? (.*)\.|)    
     {
@@ -229,23 +312,30 @@ while (my $s = <IN>)
     }
 
     # successful dns reply
-    # TODO: handle answers with several ips
     if ($s =~ m|[0-9.]*\.53 > .*: ([0-9]*) [0-9]+/[0-9]+/[0-9]+( .*)|)
     {
 	my ($reqn, $ans) = ($1, $2);
 	my $host = $dns_req{$reqn};
 	my @tab = split(/,/, $ans);
-	# my @ips;
+	@{$dns_alias{$host}} = ();
 	foreach my $a (@tab)
 	{
 	    if ($a =~ m| A ([0-9.]*)|)
 	    {
 		my $ip = $1;
 		$rev_dns{$ip} = $host;
-		# push(@ips, $ip);
+		next;
+	    }
+
+	    # DNS Alias
+	    if ($a =~ m| CNAME (.*)\.|)
+	    {
+		my $name = $1;
+		# filter out provider stuff
+		if (!$filtered_cdns{get_domain($name)})
+		{ push(@{$dns_alias{$host}}, $name); }
 	    }
 	}
-	# print "$host -> @ips\n";
 	next;
     }
 
