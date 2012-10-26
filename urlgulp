@@ -14,13 +14,16 @@ $url_trunc_first = "balanced";
 $group_really_long_urls = 0;
 $really_long_thres = 100;
 
+$debug = 0;
+
 ###################################################
 
 sub usage
 {
-    print "Usage: urlgulp [-qr] [-i interface]\n";
+    print "Usage: urlgulp [-qrd] [-i interface]\n";
     print "  -q: Quiet mode. Don't log urls, only domains.\n";
     print "  -r: Raw mode, just dump it all. No url coloring, grouping or truncating.\n";
+    print "  -d: Debug mode (use twice for more).\n";
     exit(1);
 }
 
@@ -55,6 +58,13 @@ for (; @ARGV != 0; shift(@ARGV))
 	$interface = $ARGV[0];
 	next;
     }
+
+    if ($ARGV[0] eq "-d")
+    {
+	$debug++;
+	next;
+    }
+
 
     usage();
 }
@@ -121,6 +131,7 @@ my $interval = 5;
 my %req_by_host;
 my @servers; # servers in request order
 my $chunk_begin = 1;
+my $dns_requests = 0;
 
 sub max
 {
@@ -277,6 +288,7 @@ sub print_reqs
 {
     my $current_domain = get_domain($servers[0]);
 
+    print "$color{bb}DNS:$dns_requests$color{e}\n";
     foreach my $host (@servers)
     {
 	my $n = @{$req_by_host{$host}};
@@ -312,6 +324,7 @@ sub print_reqs
     %req_by_host = ();
     @servers = ();
     $chunk_begin = 1;
+    $dns_requests = 0;
 }
 $SIG{ALRM} = sub { print_reqs(); };
 
@@ -332,7 +345,7 @@ sub add_request
 ##############################################################
 
 # what a hack ... =)
-open(IN, " $cmd2 & exec $cmd1 | "); 
+open(IN, " $cmd2 & exec $cmd1 | ");
 
 while (my $s = <IN>)
 {
@@ -374,18 +387,27 @@ while (my $s = <IN>)
     # 19:50:26.467811 IP 192.168.1.1.53 > 192.168.1.102.44541: 44119 20/3/3 CNAME condenast.112.2o7.net., A 66.235.138.18, ...
 
     # dns request
-    if ($s =~ m|> [0-9.]*\.53: ([0-9]*)\+ A\? (.*)\.|)    
+    if ($s =~ m|> [0-9.]*\.53: ([0-9]*)[+]* A\? (.*)\.|)    
     {
 	my ($reqn, $host) = ($1, $2);
 	$dns_req{$reqn} = $host;
+	$dns_requests++;
+	if ($debug >= 2) { print "DNS request [$reqn] $host\n"; }
 	next;
     }
 
     # successful dns reply
-    if ($s =~ m|[0-9.]*\.53 > .*: ([0-9]*) [0-9]+/[0-9]+/[0-9]+( .*)|)
+    if ($s =~ m|[0-9.]*\.53 > .*: ([0-9]*)[-*]* [0-9]+/[0-9]+/[0-9]+( .*)|)
     {
 	my ($reqn, $ans) = ($1, $2);
 	my $host = $dns_req{$reqn};
+	if ($host eq "")
+	{ 
+	    print "WARNING: dns reply with no matching dns request...\n"; 
+	    next;
+	}
+	if ($debug) { print "DNS reply   [$reqn] $host: "; }
+
 	my @tab = split(/,/, $ans);
 	@{$dns_alias{$host}} = ();
 	foreach my $a (@tab)
@@ -394,6 +416,7 @@ while (my $s = <IN>)
 	    {
 		my $ip = $1;
 		$rev_dns{$ip} = $host;
+		if ($debug) { print "$ip "; }
 		next;
 	    }
 
@@ -401,11 +424,16 @@ while (my $s = <IN>)
 	    if ($a =~ m| CNAME (.*)\.|)
 	    {
 		my $name = $1;
+		if ($debug >= 2) { print "=$name "; }
 		# filter out provider stuff
 		if (!$filtered_cdns{get_domain($name)})
-		{ push(@{$dns_alias{$host}}, $name); }
+		{ 
+		    if ($debug == 1) { print "=$name "; }
+		    push(@{$dns_alias{$host}}, $name); 
+		}
 	    }
 	}
+	if ($debug) { print "\n"; }
 	next;
     }
 

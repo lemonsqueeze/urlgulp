@@ -1,7 +1,21 @@
 
+- getting very different results using orange DNS and opendns,
+  (wired.com, not even finding aliases with orange!)
+  (reverse lookup not even working with orange !!)
+  Do some checks on startup ?
+
+- Don't completely trust CNAME records for finding aliases,
+  wildly different ip adr for host in same domain should be good indicator
+
+- finish debug mode, only printing dns stuff right now
+
+- show number of dns requests
+  -> can check if caching works
 - document output
 
 hard:
+- bandwidth usage for each resource
+  -> can check caching
 - ssl traffic
 - detect tracking pictures ?
 - display proxy for proxied requests ?
