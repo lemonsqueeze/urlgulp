@@ -9,8 +9,6 @@
 
 - finish debug mode, only printing dns stuff right now
 
-- show number of dns requests
-  -> can check if caching works
 - document output
 
 hard:
@@ -31,6 +29,8 @@ hard:
 ----------------------
 DONE
 
+- show number of dns requests
+  -> can check if caching works
 - command line options:
   -i iface
 - handle/display referrer ?
