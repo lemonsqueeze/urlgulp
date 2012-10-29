@@ -131,9 +131,11 @@ my $interval = 5;
 my %req_by_host;
 my @servers; # servers in request order
 my $chunk_begin = 1;
-# for accounting only
-my $dns_requests = 0;
-my %dns_requests_by_host;
+# for accounting only:
+my $dns_requests = 0;              # no. of dns requests in the interval
+my %dns_hosts;			   # hosts requested (all time)
+my %dns_hosts_before;		   # hosts requested (all time) before interval
+my %dns_hosts_interval;            # hosts requested in the interval
 
 sub max
 {
@@ -289,11 +291,24 @@ sub get_dns_aliases
 # Summary of dns requests. (to log everything use -d)
 sub print_dns_reqs
 {
-    print "$color{bb}DNS:$dns_requests$color{e}";
-    my $dups = $dns_requests - keys(%dns_requests_by_host);
+    my $str = "$color{bb}DNS:$dns_requests$color{e}";
+    my $extra = "";
+
+    # duplicates
+    my $dups = $dns_requests - keys(%dns_hosts_interval);
     if ($dups)
-    { print "$color{rb} ($dups dups)$color{e}"; }
-    print "\n";
+    { $extra .= "$color{rb}$dups dup$color{e}"; }
+
+    # already requested hosts
+    my $new_reqs = keys(%dns_hosts) - keys(%dns_hosts_before);
+    my $n = keys(%dns_hosts_interval) - $new_reqs;
+    if ($n)
+    { $extra .= ($extra eq "" ? "" : " ") . 
+	  "$color{pb}$n rpt$color{e}"; 
+    }
+    
+    $extra = ($extra eq "" ? "" : "($extra)");
+    print "$str $extra\n";
 }
 
 sub print_reqs
@@ -337,7 +352,8 @@ sub print_reqs
     @servers = ();
     $chunk_begin = 1;
     $dns_requests = 0;
-    %dns_requests_by_host = ();
+    %dns_hosts_interval = ();
+    %dns_hosts_before = %dns_hosts;
 }
 $SIG{ALRM} = sub { print_reqs(); };
 
@@ -404,8 +420,10 @@ while (my $s = <IN>)
     {
 	my ($reqn, $host) = ($1, $2);
 	$dns_req{$reqn} = $host;
+	# accounting
 	$dns_requests++;
-	$dns_requests_by_host{$host} = 1;
+	$dns_hosts{$host} = 1;
+	$dns_hosts_interval{$host} = 1;
 	if ($debug >= 2) { print "DNS request [$reqn] $host\n"; }
 	next;
     }

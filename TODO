@@ -1,4 +1,8 @@
 
+- different interval logic:
+  - either strict time intervals like now
+  - or timeout after nothing happens
+
 - getting very different results using orange DNS and opendns,
   (wired.com, not even finding aliases with orange!)
   (reverse lookup not even working with orange !!)
