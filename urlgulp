@@ -4,7 +4,7 @@
 # Default Settings
 
 $interface = "eth0";
-
+$interval = 5;
 $print_urls = 1;
 
 # $url_trunc_first = "tail";
@@ -16,17 +16,21 @@ $really_long_thres = 100;
 
 $debug = 0;
 $tcp_only = 0;
+$wait_quiet = 0;
 
 ###################################################
 
 sub usage
 {
-    print "Usage: urlgulp [-qrd] [-i interface]\n";
-    print "  -q: Quiet mode. Don't log urls, only domains.\n";
-    print "  -r: Raw mode, just dump it all. No url coloring, grouping or truncating.\n";
-    print "  -d: Debug mode (use twice for more).\n";
-    print "  --tcp-only: only track tcp connections (no urls)\n";
-    print "              useful with proxies to see which ip's are connected to.\n";
+    print "Usage: urlgulp [options] [-i interface]\n\n";
+    print "  -d delay     interval between updates (seconds).\n";
+    print "  -q           Quiet mode. Don't log urls, only domains.\n";
+    print "  -r           Raw mode, just dump it all. No url coloring, grouping or truncating.\n";
+    print "  -v           Debug mode (use twice for more).\n";
+    print "  -w           wait until all is quiet for an interval to display.\n";
+    print "               default: display every interval.\n";
+    print "  --tcp-only   only track tcp connections (no urls)\n";
+    print "               useful with proxies to see which ip's are connected to.\n";
     exit(1);
 }
 
@@ -48,32 +52,38 @@ for (; @ARGV != 0; shift(@ARGV))
 	$print_urls = 0;
 	next;
     }
-    
     if ($ARGV[0] eq "-r")
     {
 	$print_urls = 2;
 	next;
     }
-
     if ($ARGV[0] eq "--tcp-only")
     {
 	$tcp_only = 1;
 	next;
     }
-
     if ($ARGV[0] eq "-i")
     {
 	shift(@ARGV);
 	$interface = $ARGV[0];
 	next;
     }
-
     if ($ARGV[0] eq "-d")
+    {
+	shift(@ARGV);
+	$interval = $ARGV[0];
+	next;
+    }
+    if ($ARGV[0] eq "-w")
+    {
+	$wait_quiet = 1;
+	next;
+    }
+    if ($ARGV[0] eq "-v")
     {
 	$debug++;
 	next;
     }
-
 
     usage();
 }
@@ -136,8 +146,6 @@ my %filtered_cdns = (
     
 ##############################################################
 # summary display
-
-my $interval = 5;
 
 my %req_by_host;
 my @servers; # servers in request order
@@ -377,10 +385,15 @@ sub add_request
     { push(@servers, $host); }
     push(@{$req_by_host{$host}}, "$path|$referer|$method");
     
-    if ($chunk_begin)
+    if ($wait_quiet)
+    {  alarm $interval;	}
+    else
     {
-	$chunk_begin = 0;
-	alarm $interval;
+	if ($chunk_begin)
+	{
+	    $chunk_begin = 0;
+	    alarm $interval;
+	}
     }
 }
 

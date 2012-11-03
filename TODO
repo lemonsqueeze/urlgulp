@@ -1,7 +1,5 @@
 
-- different interval logic:
-  - either strict time intervals like now
-  - or timeout after nothing happens
+- manual mode: determine interval using key presses
 
 - getting very different results using orange DNS and opendns,
   (wired.com, not even finding aliases with orange!)
@@ -33,6 +31,9 @@ hard:
 ----------------------
 DONE
 
+- different interval logic:
+  - either strict time intervals like now
+  - or timeout after nothing happens
 - show number of dns requests
   -> can check if caching works
 - command line options:
