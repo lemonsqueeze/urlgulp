@@ -1,36 +1,41 @@
+TODO
 
-- manual mode: determine interval using key presses
+- display useragent
+- global bandwidth usage per interval !
+- doc
 
 - getting very different results using orange DNS and opendns,
   (wired.com, not even finding aliases with orange!)
   (reverse lookup not even working with orange !!)
   Do some checks on startup ?
 
-- Don't completely trust CNAME records for finding aliases,
-  wildly different ip adr for host in same domain should be good indicator
+- Don't completely trust CNAME records for finding DNS aliases,
+  use wildly different ip adr for host in same domain as indicator ?
 
 - finish debug mode, only printing dns stuff right now
 
-- document output
+- check how ajax shows up
+- load/save dns tables so we can restart easily ?
 
-hard:
+--------------------------
+
+hard: (rewrite)
 - bandwidth usage for each resource
   -> can check caching
 - ssl traffic
+- cookies, *especially* 3rd party.
 - detect tracking pictures ?
 - display proxy for proxied requests ?
 - display params for POST
 
 
-- command line options:
-  -d delay
-- check how ajax shows up
-- load/save dns tables so we can restart easily ?
-
 
 ----------------------
 DONE
 
+- key mode: wait for key press to display.
+- command line options:
+  -d delay
 - different interval logic:
   - either strict time intervals like now
   - or timeout after nothing happens
