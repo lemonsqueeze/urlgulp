@@ -1,11 +1,99 @@
                              urlgulp
                              =======
 
-Log, group and pretty print urls from http traffic on the network
+ privacy tool - pretty print urls requests from http traffic on the network
+-----------------------------------------------------------------------------
 
-Usage: url_logger [-qr] [-i interface]
-  -q: Quiet mode. Don't log urls, only domains.
-  -r: Raw mode, just dump it all. No url coloring, grouping or truncating.
+urlgulp's goal is to make it easy to answer questions like:
+  "what happens on the network when browsing site foo.com ?"
+(or any other program for that matter)
+
+It gives a quick and easy to read summary of network activity around an
+http request, highlighting potential issues with third party content
+(3pe's). opening of non http tcp connections and dns traffic is also
+monitored.
+
+At the end of each interval (time or key press based) requests are grouped
+by host and highlighted, with pictures and css collapsed by default for
+clarity. 
+
+It makes it easy to visualize:
+- third party domains involved
+- url query strings
+- javascript resources loaded
+- leaked referrer
+- use of dns aliases to 3rd party domain
+- post requests
+- user agent used
 
 
-Dependencies: perl, tcpdump, urlsnarf (dsniff)
+Installation:
+- dependencies: perl, tcpdump, urlsnarf (dsniff)
+- run as root.
+
+-----------------------------------------------------------------------------
+
+Usage: urlgulp [options] [-i interface]
+
+display mode:
+  -k            wait for key press to display (default).
+  -f            display every interval seconds.
+  -w            display after interval seconds of silence.
+
+other options:
+  -d <interval> set display interval for -f and -w (default: 5s).
+  -u            show user agent used for each request.
+  -l            show legend.
+  -q            quiet mode. Don't log urls, only domains.
+  -r            raw url mode. just dump it all, no url coloring, grouping or truncating.
+  -v            debug mode (use twice for more).
+  --tcp-only    track tcp connections only (no urls)
+                will show which IP addresses are actually being contacted,
+                useful to check whether a remote proxy is really being used or not.
+  --version     show version.
+
+-----------------------------------------------------------------------------
+Sample screenshots (no color)
+
+                  slashdot.org       [3]
+                      /
+                      [images: 2]
+                    a.fsdn.com       [23]
+                      /sd/classic.css?release_20130107
+                      /sd/classic/img/twitter_24.png?1
+                      [images: 21]
+
+-----------------------------------------------------------------------------
+
+DNS:12 (6 dup)
+                     wired.com       [1]
+                    /
+                 www.wired.com       [58]
+                    /
+                    /css/global.css?v=20121120a
+                    /css/global_nav.css?v=20121120a
+                    /css/xrail.css?v=20121120a
+                    /js/cn-fe-common/jquery-1.7.2.min.js
+                    /js/cn.minified.js?v=20121120a
+                    /js/global.js?v=20121120a
+                    /js/global_nav.js?v=20121120a
+                    /css/global_ecom.css?v=20121120a
+                    /js/ecom/ecomfw.min.js
+                    /css/global_nav.css?v=20121120a
+                    /js/lazy-load/jquery.sonar.min.js
+                    /js/lazy-load/lazy-load.js
+                    /js/socialmedia_init.js?v=20121120a
+                    /js/scrolldock/scrolldock.js?v=20121120a
+                    /design/wp-content/uploads/2013/01/20130106185613-pinoccio-wireless-wifi-microcontroller-200x100.jpg
+                    [images: 36]
+                cdn.mobify.com       [1]
+ref!                /sites/wired/production/a.js
+           fonts.condenast.com       [1]
+ref!                /ztc8lol.js
+               howto.wired.com       [4]
+ref!                /mediawiki/images/LightPainting_200x100.jpg
+ref!                /mediawiki/images/AppleMalware200x100.jpg
+ref!                /mediawiki/images/Wires200x100.jpg
+ref!                /mediawiki/images/Wires200x100.jpg
+             static.reddit.com       [1]                      = s3.amazonaws.com, s3.a-geo.amazonaws.com, s3-1.amazonaws.com
+ref!                /wired.js

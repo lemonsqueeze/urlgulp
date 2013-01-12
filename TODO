@@ -1,25 +1,38 @@
 TODO
 
 - display useragent
-- global bandwidth usage per interval !
+- option to disable grouping
+- global bandwidth usage per interval
 - doc
+
+- Don't completely trust CNAME records for finding DNS aliases,
+  use wildly different ip adr for host in same domain as indicator ?
+
+- check how ajax shows up
+- load/save dns tables so we can restart easily ?
+
+- option to select url truncating logic ?
+
+
+-----------------------------------------------------------
+Fixme!
+
+- fix raw mode:
+  url parsing
+  doesn't display ref post etc ...
+
+- finish debug mode, only printing dns stuff right now
 
 - getting very different results using orange DNS and opendns,
   (wired.com, not even finding aliases with orange!)
   (reverse lookup not even working with orange !!)
   Do some checks on startup ?
 
-- Don't completely trust CNAME records for finding DNS aliases,
-  use wildly different ip adr for host in same domain as indicator ?
+- clean up pretty_print_url()
 
-- finish debug mode, only printing dns stuff right now
+------------------------------------------------------------
+hard (rewrite)
 
-- check how ajax shows up
-- load/save dns tables so we can restart easily ?
-
---------------------------
-
-hard: (rewrite)
 - bandwidth usage for each resource
   -> can check caching
 - ssl traffic

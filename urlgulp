@@ -6,6 +6,9 @@ $version = "1.0";
 
 $interface = "eth0";
 $interval = 5;
+# 0: quiet mode (domains only)
+# 1: default mode (coloring, grouping)
+# 2: raw mode
 $print_urls = 1;
 
 # $url_trunc_first = "tail";
@@ -19,6 +22,8 @@ $debug = 0;
 $tcp_only = 0;
 $wait_quiet = 0;
 $key_mode = 1;  # default now
+$show_agent = 0;
+$show_legend = 0;
 
 ###################################################
 
@@ -32,6 +37,8 @@ sub usage
     print "\n";
     print "other options:\n";
     print "  -d <interval> set display interval for -f and -w (default: 5s).\n";
+    print "  -u            show user agent used for each request.\n";
+    print "  -l            show legend.\n";
     print "  -q            quiet mode. Don't log urls, only domains.\n";
     print "  -r            raw url mode. just dump it all, no url coloring, grouping or truncating.\n";
     print "  -v            debug mode (use twice for more).\n";
@@ -42,6 +49,7 @@ sub usage
     exit(1);
 }
 
+# ansi color codes
 %color = ( "wb" => "\033[40;37;1m",  # white bold
 	   "rb" => "\033[40;31;1m",  # red bold
 	   "yb" => "\033[40;33;1m",  # yellow bold
@@ -49,8 +57,10 @@ sub usage
 	   "bb" => "\033[40;34;1m",  # blue bold
 	   "cb" => "\033[40;36;1m",  # cyan bold
 	   "e" => "\033[0m");
-my $color_seq_len = 14;
+
+# terminal width
 my $columns = `tput cols`;
+# amount of space displayed in front of each url.
 my $url_spc = "                    ";
 
 for (; @ARGV != 0; shift(@ARGV))
@@ -106,6 +116,16 @@ for (; @ARGV != 0; shift(@ARGV))
     if ($ARGV[0] eq "-v")
     {
 	$debug++;
+	next;
+    }
+    if ($ARGV[0] eq "-u")
+    {
+	$show_agent = 1;
+	next;
+    }
+    if ($ARGV[0] eq "-l")
+    {
+	$show_legend = 1;
 	next;
     }
 
@@ -193,17 +213,20 @@ my %filtered_cdns = (
     "yahoodns.net" => 1);
     
     
-##############################################################
-# summary display
+###############################################################################
+# display summary
 
 my %req_by_host;
-my @servers; # servers in request order
+my @servers;			   # servers in request order
 my $chunk_begin = 1;
+
 # for accounting only:
 my %dns_requests;                  # dns requests in the interval (by req no.)
 my %dns_hosts;			   # hosts requested (all time)
 my %dns_hosts_before;		   # hosts requested (all time) before interval
 my %dns_hosts_interval;            # hosts requested in the interval
+
+my %user_agent_nos;		   # number corresponding to each user agent (all time)
 
 sub max
 {
@@ -251,19 +274,23 @@ sub leaked_referer
 sub pretty_print_url
 {
     my ($host) = @_;
-    # display summary for images
+    # display summary for images and css
     my $images = 0, $css = 0;
     foreach my $req (@{$req_by_host{$host}})
     { 
-	my ($path, $referer, $method) = split(/\|/, $req);
+	my ($path, $referer, $method, $agent) = split(/\|/, $req);
 	my $leaked_ref = leaked_referer($host, $referer);
 	my $special_notice = ($leaked_ref || $method eq "POST");
 
+	# stuff displayed to the left of the url
 	my $head = (($leaked_ref ? "ref!" : "") . 
-		    ($method eq "POST" ? "post" : "") . 
-		    $url_spc);
+		    ($method eq "POST" ? "post" : ""));
+        # display user agent ?
+	my $agent_str = ($show_agent ? sprintf("[%i]", $user_agent_nos{$agent}) : "");
+	$head = sprintf("%-8s %s%s", $head, $agent_str, $url_spc);
 	$head = sprintf("%.*s", length($url_spc), $head);
-	
+
+	# image and css grouping
 	if ($path =~ m/\.(png|jpg|jpeg|gif|ico)$/i &&
 	    !$special_notice &&
 	    ($group_really_long_urls || length($path) < $really_long_thres))
@@ -274,6 +301,7 @@ sub pretty_print_url
 	    ($group_really_long_urls || length($path) < $really_long_thres))
 	{   $css++; next; }
 
+	# parse pathname part of the url into dir, file and tail
 	$path =~ m|^([^?&:]*)/([^/?&:]*)(.*)$| || die("should not happen: '$path'");
 	my ($dir, $file, $tail) = ($1, $2, $3);
 	my $line = "$head$path";
@@ -316,7 +344,7 @@ sub pretty_print_url
 	$file_color = $color{bb} if ($file =~ m|\.js|);
 	$line =~ s|^([^?&:]*)/([^/?&:]*)(.*)$|$1/$file_color$2$color{e}$3|;
 
-	# highlight ref! and post!
+	# highlight ref! and post! now that we won't interfere with formatting
 	$line =~ s/ref!/$color{rb}ref!$color{e}/;
 	$line =~ s/post!/$color{yb}post!$color{e}/;
 	print "$line\n";
@@ -327,6 +355,9 @@ sub pretty_print_url
     if ($css)
     { printf("${url_spc}[$color{wb}css$color{e}: $css]\n"); }
 }
+
+###############################################################################
+# dns related display
 
 sub dns_alias_for_other_domain
 {
@@ -381,11 +412,52 @@ sub print_dns_reqs
     print "$str $extra\n";
 }
 
+###############################################################################
+# user agent stuff
+
+sub print_user_agents
+{
+    my $n = keys(%user_agent_nos);
+    return if (!$n);
+    printf("user agents:\n");
+    for (my $i = 1; $i <= $n; $i++)
+    {
+	foreach my $agent (keys(%user_agent_nos))
+	{
+	    if ($user_agent_nos{$agent} == $i)
+	    {
+		printf("  [%i] %s\n", $i, $agent);
+	    }
+	}
+    }
+    print "\n";
+}
+
+sub add_user_agent
+{
+    my ($agent) = @_;
+    return if ($user_agent_nos{$agent});
+    my $n = keys(%user_agent_nos);
+    $user_agent_nos{$agent} = $n + 1;
+}
+
+sub print_legend
+{
+    my $a = "referrer user       domain\n";
+    my $b = "post     agent        url            count";
+    $b = sprintf("%s%*s", $b, $columns - length($b), "dns aliases\n");
+    printf("%s\n$a$b%s\n", "-" x $columns, "-" x $columns);
+}
+
+
 sub print_reqs
 {
     my $current_domain = get_domain($servers[0]);
 
+    print_user_agents() if ($show_agent);
+    print_legend() if ($show_legend);
     print_dns_reqs();
+
     foreach my $host (@servers)
     {
 	my $n = @{$req_by_host{$host}};
@@ -396,7 +468,7 @@ sub print_reqs
 	    $port = ":$2";
 	}
 
-	# evil stuff -> red color
+	# print host. 3rd party domain -> red color
 	my ($color_in, $color_out) = ($color{yb}, $color{e});
 	if (get_domain($host) ne $current_domain)
 	{ ($color_in, $color_out) = ($color{rb}, $color{e}); }	
@@ -410,7 +482,7 @@ sub print_reqs
 	if ($print_urls == 2)
 	{
 	    foreach my $req (@{$req_by_host{$host}})
-	    { 
+	    {   # FIXME !
 		my ($path, $referer) = split(/"/, $req);
 		printf("$url_spc%s\n", $path); 
 	    }
@@ -430,10 +502,11 @@ $SIG{ALRM} = sub { print_reqs(); };
 
 sub add_request
 {
-    my ($host, $path, $referer, $method) = @_;
+    my ($host, $path, $referer, $method, $agent) = @_;
     if (!$req_by_host{$host})
     { push(@servers, $host); }
-    push(@{$req_by_host{$host}}, "$path|$referer|$method");
+    push(@{$req_by_host{$host}}, "$path|$referer|$method|$agent");
+    add_user_agent($agent);
 
     if ($key_mode)
     { 
@@ -480,12 +553,12 @@ while (my $s = <IN>)
 
     # 192.168.1.102 - - [11/Mar/2012:15:24:15 +0100] "GET http://portail.free.fr/im_zapette/mini_17390.jpg HTTP/1.1" - - "http://portail.free.fr/" "Opera/9.80 (X11; Linux i686; U; en) Presto/2.9.168 Version/11.50"
     # 192.168.1.102 - - [11/Mar/2012:15:21:52 +0100] "POST http://www.javascript-coder.com/files/htm-form-tutorial/html-form-tutorial-example-1.html HTTP/1.1" - - "http://www.javascript-coder.com/files/htm-form-tutorial/html-form-tutorial-example-1.html" "Opera/9.80 (X11; Linux i686; U; en) Presto/2.9.168 Version/11.50"
-    if ($s =~ m|"(GET) http://([^/]*)(/[^ ]*) HTTP[^"]*" - - "([^"]*)"|   ||
-	$s =~ m|"(POST) http://([^/]*)(/[^ ]*) HTTP[^"]*" - - "([^"]*)"|)
+    if ($s =~ m|"(GET) http://([^/]*)(/[^ ]*) HTTP[^"]*" - - "([^"]*)" "([^"]*)"|   ||
+	$s =~ m|"(POST) http://([^/]*)(/[^ ]*) HTTP[^"]*" - - "([^"]*)" "([^"]*)"|)
     {
-	my ($method, $host, $path, $referer) = ($1, $2, $3, $4);
+	my ($method, $host, $path, $referer, $agent) = ($1, $2, $3, $4, $5);
 	#printf("%s|%s|%s\n", $host, $path, $referer, $method);
-	add_request($host, $path, $referer, $method);
+	add_request($host, $path, $referer, $method, $agent);
 	next;
     }
 
