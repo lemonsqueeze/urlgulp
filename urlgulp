@@ -1,4 +1,5 @@
 #!/usr/bin/perl
+$version = "1.0";
 
 ###################################################
 # Default Settings
@@ -17,20 +18,27 @@ $really_long_thres = 100;
 $debug = 0;
 $tcp_only = 0;
 $wait_quiet = 0;
+$key_mode = 1;  # default now
 
 ###################################################
 
 sub usage
 {
     print "Usage: urlgulp [options] [-i interface]\n\n";
-    print "  -d delay     interval between updates (seconds).\n";
-    print "  -q           Quiet mode. Don't log urls, only domains.\n";
-    print "  -r           Raw mode, just dump it all. No url coloring, grouping or truncating.\n";
-    print "  -v           Debug mode (use twice for more).\n";
-    print "  -w           wait until all is quiet for an interval to display.\n";
-    print "               default: display every interval.\n";
-    print "  --tcp-only   only track tcp connections (no urls)\n";
-    print "               useful with proxies to see which ip's are connected to.\n";
+    print "display mode:\n";
+    print "  -k            wait for key press to display (default).\n";
+    print "  -f            display every interval seconds.\n";
+    print "  -w            display after interval seconds of silence.\n";
+    print "\n";
+    print "other options:\n";
+    print "  -d <interval> set display interval for -f and -w (default: 5s).\n";
+    print "  -q            quiet mode. Don't log urls, only domains.\n";
+    print "  -r            raw url mode. just dump it all, no url coloring, grouping or truncating.\n";
+    print "  -v            debug mode (use twice for more).\n";
+    print "  --tcp-only    track tcp connections only (no urls)\n";
+    print "                will show which IP addresses are actually being contacted,\n";
+    print "                useful to check whether a remote proxy is really being used or not.\n";
+    print "  --version     show version.\n";
     exit(1);
 }
 
@@ -62,6 +70,11 @@ for (; @ARGV != 0; shift(@ARGV))
 	$tcp_only = 1;
 	next;
     }
+    if ($ARGV[0] eq "--version")
+    {
+	print "urlgulp version $version.\n";
+	exit 0;
+    }
     if ($ARGV[0] eq "-i")
     {
 	shift(@ARGV);
@@ -77,6 +90,17 @@ for (; @ARGV != 0; shift(@ARGV))
     if ($ARGV[0] eq "-w")
     {
 	$wait_quiet = 1;
+	$key_mode = 0;
+	next;
+    }
+    if ($ARGV[0] eq "-f")
+    {
+	$key_mode = 0;
+	next;
+    }
+    if ($ARGV[0] eq "-k")
+    {
+	$key_mode = 1;
 	next;
     }
     if ($ARGV[0] eq "-v")
@@ -88,24 +112,49 @@ for (; @ARGV != 0; shift(@ARGV))
     usage();
 }
 
-# Turn off buffering on stdout
+sub key_mode_prompt
+{
+    print "buffering requests, press ENTER to display "
+}
+
+# Make stdout line buffered.
 $|=1;
 
-##############################################################
-# http dump
+# intro message
+print "urlgulp: listening on $interface";
+if ($key_mode)
+{ print ".\n" }
+elsif ($wait_quiet)
+{ print ", display after ${interval}s of silence.\n\n"; }
+else
+{ print ", display every ${interval}s.\n\n"; }
 
-my $cmd1 = "urlsnarf -n -i $interface";
-#my $cmd1 = "cat testurltrunc.log";
+key_mode_prompt() if ($key_mode);
 
 ##############################################################
-# non http dump
+# read input from terminal
+
+# maybe one day i'll use select instead of this beautiful hack ...
+if ($key_mode)
+{ 
+    $key_cmd = "perl -e '\$|=1; open(IN, \"< /dev/tty\"); while (my \$s=<IN>){ print \"key press\\n\"; }' &";
+}
+
+##############################################################
+# http requests sniffing
+
+my $urlsnarf_cmd = "urlsnarf -n -i $interface";
+#my $urlsnarf_cmd = "cat testurltrunc.log";
+
+##############################################################
+# dns and new tcp connection sniffing (other than http)
 # TODO: log udp traffic
 # TODO: log ipv6 traffic
 
 my $pcap_filter = "udp port 53 or (not tcp port 80 and tcp[tcpflags] = tcp-syn)";
 if ($tcp_only)
 {  $pcap_filter = "udp port 53 or                      tcp[tcpflags] = tcp-syn "; }
-my $cmd2 ="tcpdump -s 500 -l -n -i $interface '$pcap_filter'"; 
+my $tcpdump_cmd ="tcpdump -s 500 -l -n -i $interface '$pcap_filter'"; 
 
 my %dns_req;
 my %rev_dns;
@@ -368,7 +417,8 @@ sub print_reqs
 	}
     }
     print "\n";
-
+    key_mode_prompt() if ($key_mode);
+    
     %req_by_host = ();
     @servers = ();
     $chunk_begin = 1;
@@ -384,29 +434,47 @@ sub add_request
     if (!$req_by_host{$host})
     { push(@servers, $host); }
     push(@{$req_by_host{$host}}, "$path|$referer|$method");
-    
+
+    if ($key_mode)
+    { 
+	print ".";
+	return; 
+    }
+
     if ($wait_quiet)
-    {  alarm $interval;	}
-    else
+    { 
+	alarm $interval;
+	return;
+    }
+
+    # default mode: fixed intervals
+    if ($chunk_begin)
     {
-	if ($chunk_begin)
-	{
-	    $chunk_begin = 0;
-	    alarm $interval;
-	}
+	$chunk_begin = 0;
+	alarm $interval;
     }
 }
 
 ##############################################################
+# input multiplexing and parsing
 
 # what a hack ... =)
+# we could use IO::BufferedSelect one day (or gnu parallel ?)
 if (!$tcp_only)
-{ open(IN, " $cmd2 & exec $cmd1 | "); }
+{ open(IN, "$key_cmd    $tcpdump_cmd 2>&1 &    exec $urlsnarf_cmd 2>&1 | "); }
 else
-{ open(IN, " $cmd2 | "); }
+{ open(IN, "$key_cmd    $tcpdump_cmd 2>&1 | "); }
 
 while (my $s = <IN>)
 {
+    if ($s =~ m|^key press$|)
+    {
+	#print "key press detected !\n";
+	print "\n";
+	print_reqs();
+	next;
+    }
+
     ##############################################################
     # http dump
 
@@ -519,6 +587,12 @@ while (my $s = <IN>)
 
 	next;
     }
+
+    # messages we can safely ignore (FIXME: show in debug mode ?)
+    if ($s =~ m|^tcpdump: verbose output suppressed|  ||
+	$s =~ m|^listening on .*, capture size 500 bytes|  ||
+	$s =~ m|^urlsnarf: listening on|)
+    { next; }
 
     ##############################################################
     
