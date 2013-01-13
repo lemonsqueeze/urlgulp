@@ -1,34 +1,39 @@
 TODO
 
-- display useragent
+- option to set group_really_long_urls and really_long_thres.
+- show time
+- provide a way to run as normal user ?
+    sudo urlcap | urlgulp -i -
 - option to disable grouping
+- option to select url truncating logic ?
 - global bandwidth usage per interval
 - doc
 
 - Don't completely trust CNAME records for finding DNS aliases,
   use wildly different ip adr for host in same domain as indicator ?
 
-- check how ajax shows up
-- load/save dns tables so we can restart easily ?
+- load/save dns tables so we can restart easily without losing dns cache ?
 
-- option to select url truncating logic ?
-
+- file mode -> way to use tcpdump capture file as input ?
+  possible but will have to rewrite timing logic.
+  possible workaround in the meantime:
+    if there's a way to "replay" a capture file and get the same output and
+    timing tcpdump would have produced, then we can use that instead of live
+    capture ...
 
 -----------------------------------------------------------
 Fixme!
 
-- fix raw mode:
-  url parsing
-  doesn't display ref post etc ...
+- react to SIGWINCH
 
 - finish debug mode, only printing dns stuff right now
+
+- check how ajax shows up
 
 - getting very different results using orange DNS and opendns,
   (wired.com, not even finding aliases with orange!)
   (reverse lookup not even working with orange !!)
   Do some checks on startup ?
-
-- clean up pretty_print_url()
 
 ------------------------------------------------------------
 hard (rewrite)
@@ -43,18 +48,3 @@ hard (rewrite)
 
 
 
-----------------------
-DONE
-
-- key mode: wait for key press to display.
-- command line options:
-  -d delay
-- different interval logic:
-  - either strict time intervals like now
-  - or timeout after nothing happens
-- show number of dns requests
-  -> can check if caching works
-- command line options:
-  -i iface
-- handle/display referrer ?
-- look for suspiciously long urls, whether in images, css etc

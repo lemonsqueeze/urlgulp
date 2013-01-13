@@ -252,6 +252,41 @@ sub get_domain
     return $h;
 }
 
+# truncate urls to fit term's width.
+sub truncate_url
+{
+    my ($head, $path, $dir, $file, $tail) = @_;
+    # if dir too long, truncate it ...
+    if ($url_trunc_first eq "path" &&
+	length("$head$dir/$file$tail") > $columns)
+    {
+	my $len = max($columns - length("${head}[..]/$file$tail"), 0);
+	$dir = "[..]" . substr($dir, max(length($dir) - $len, 0), $len);
+    }
+    
+    if ($url_trunc_first eq "tail" &&
+	length("$head$dir/$file?") > $columns)
+    { 
+	my $len = max($columns - length("${head}[..]/$file?"), 0);
+	$dir = "[..]" . substr($dir, max(length($dir) - $len, 0), $len);
+    }
+    
+    if ($url_trunc_first eq "balanced" &&
+	length("$head$dir/$file$tail") > $columns)
+    { 
+	my $avail = max($columns - length("${head}[..]/$file?"), 0);
+	my $tailn = min(length($tail), $avail / 2);
+	my $len = $avail - $tailn;
+	if ($len < length($dir))
+	{
+	    $dir = "[..]" . substr($dir, length($dir) - $len, $len);
+	}
+    }
+    
+    # ... truncate end if needed
+    return substr("$head$dir/$file$tail", 0, $columns);
+}
+
 sub leaked_referer
 {
     my ($host, $referer) = @_;
@@ -261,6 +296,35 @@ sub leaked_referer
 	return ($ref_host ne $host);
     }
     return 0;
+}
+
+# can url be grouped with others (hidden) ?
+# not if grouping would hide a warning, or url is suspiciously long.
+sub can_group_url
+{
+    my ($path, $warning) = @_;
+    return (!$warning &&               
+	    ($group_really_long_urls || length($path) < $really_long_thres));
+}
+
+# returns head: stuff displayed to the left of the url.
+#         warning: head contains a warning (don't group then!)
+sub url_header
+{
+    my ($referer, $method, $agent) = @_;
+    my $leaked_ref = leaked_referer($host, $referer);
+    my $warning = ($leaked_ref || $method eq "POST");
+    
+    # stuff displayed to the left of the url
+    my $head = (($leaked_ref ? "ref!" : "") . 
+		($method eq "POST" ? "post" : ""));
+    # display user agent ?    
+    my $agent_str = ($show_agent ? sprintf("[%i]", $user_agent_nos{$agent}) : "");
+    die("urlgulp: shouldn't happen, unknown user agent!") if (!$user_agent_nos{$agent});
+    
+    $head = sprintf("%-8s %s%s", $head, $agent_str, $url_spc);
+    $head = sprintf("%.*s", length($url_spc), $head);
+    return ($head, $warning);
 }
 
 # Naming:
@@ -279,26 +343,18 @@ sub pretty_print_url
     foreach my $req (@{$req_by_host{$host}})
     { 
 	my ($path, $referer, $method, $agent) = split(/\|/, $req);
-	my $leaked_ref = leaked_referer($host, $referer);
-	my $special_notice = ($leaked_ref || $method eq "POST");
 
-	# stuff displayed to the left of the url
-	my $head = (($leaked_ref ? "ref!" : "") . 
-		    ($method eq "POST" ? "post" : ""));
-        # display user agent ?
-	my $agent_str = ($show_agent ? sprintf("[%i]", $user_agent_nos{$agent}) : "");
-	$head = sprintf("%-8s %s%s", $head, $agent_str, $url_spc);
-	$head = sprintf("%.*s", length($url_spc), $head);
-
+        # head: stuff displayed to the left of the url.
+        # warning: head contains a warning (don't group then!)
+	my ($head, $warning) = url_header($referer, $method, $agent);
+	
 	# image and css grouping
 	if ($path =~ m/\.(png|jpg|jpeg|gif|ico)$/i &&
-	    !$special_notice &&
-	    ($group_really_long_urls || length($path) < $really_long_thres))
+	    can_group_url($path, $warning))
 	{   $images++; next; }
-
+	
 	if ($path =~ m/\.(css)$/i &&
-	    !$special_notice &&
-	    ($group_really_long_urls || length($path) < $really_long_thres))
+	    can_group_url($path, $warning))
 	{   $css++; next; }
 
 	# parse pathname part of the url into dir, file and tail
@@ -306,54 +362,42 @@ sub pretty_print_url
 	my ($dir, $file, $tail) = ($1, $2, $3);
 	my $line = "$head$path";
 
-	# truncate urls to term's width
+        # truncate urls to fit term's width.
 	if (length("$line") > $columns)
-	{
-	    # if dir too long, truncate it ...
-	    if ($url_trunc_first eq "path" &&
-		length("$head$dir/$file$tail") > $columns)
-	    { 
-		my $len = max($columns - length("${head}[..]/$file$tail"), 0);
-		$dir = "[..]" . substr($dir, max(length($dir) - $len, 0), $len);
-	    }				   
-	    
-	    if ($url_trunc_first eq "tail" &&
-		length("$head$dir/$file?") > $columns)
-	    { 
-		my $len = max($columns - length("${head}[..]/$file?"), 0);
-		$dir = "[..]" . substr($dir, max(length($dir) - $len, 0), $len);
-	    }
+	{ $line = truncate_url($head, $path, $dir, $file, $tail); }
 
-	    if ($url_trunc_first eq "balanced" &&
-		length("$head$dir/$file$tail") > $columns)
-	    { 
-		my $avail = max($columns - length("${head}[..]/$file?"), 0);
-		my $tailn = min(length($tail), $avail / 2);
-		my $len = $avail - $tailn;
-		if ($len < length($dir))
-		{
-		    $dir = "[..]" . substr($dir, length($dir) - $len, $len);
-		}
-	    }
-
-	    # ... truncate end if needed
-	    $line = substr("$head$dir/$file$tail", 0, $columns);
-	}
 	# highlight file
 	my $file_color = $color{wb};
 	$file_color = $color{bb} if ($file =~ m|\.js|);
 	$line =~ s|^([^?&:]*)/([^/?&:]*)(.*)$|$1/$file_color$2$color{e}$3|;
 
-	# highlight ref! and post! now that we won't interfere with formatting
+	# highlight warnings in $head now that we don't interfere with formatting.
 	$line =~ s/ref!/$color{rb}ref!$color{e}/;
-	$line =~ s/post!/$color{yb}post!$color{e}/;
+	# $line =~ s/post /$color{yb}post $color{e}/;
 	print "$line\n";
     }
 
+    # grouped stuff summary.
     if ($images)
     { printf("${url_spc}[$color{wb}images$color{e}: $images]\n"); }
     if ($css)
     { printf("${url_spc}[$color{wb}css$color{e}: $css]\n"); }
+}
+
+# barebones display, no highlighing, no coloring, no truncating.
+sub raw_print_url
+{
+    my ($host) = @_;
+    foreach my $req (@{$req_by_host{$host}})
+    {
+	my ($path, $referer, $method, $agent) = split(/\|/, $req);
+
+        # head: stuff displayed to the left of the url.
+        # warning: head contains a warning
+	my ($head, $warning) = url_header($referer, $method, $agent);
+	
+	print "$head$path\n";
+    }
 }
 
 ###############################################################################
@@ -480,13 +524,7 @@ sub print_reqs
 	{ pretty_print_url($host); }
 
 	if ($print_urls == 2)
-	{
-	    foreach my $req (@{$req_by_host{$host}})
-	    {   # FIXME !
-		my ($path, $referer) = split(/"/, $req);
-		printf("$url_spc%s\n", $path); 
-	    }
-	}
+	{ raw_print_url($host); }
     }
     print "\n";
     key_mode_prompt() if ($key_mode);
