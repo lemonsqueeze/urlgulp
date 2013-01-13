@@ -1,8 +1,8 @@
 TODO
 
-- option to group js / specify what is grouped
-- option to disable grouping in default mode
+- can't handle '|' inside urls, use array to store url requests !
 
+- sort hosts: current domain first.
 - display time
 - global bandwidth usage per interval
 

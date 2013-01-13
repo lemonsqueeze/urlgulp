@@ -6,6 +6,7 @@ $version = "1.0";
 
 $interface = "eth0";
 $interval = 5;
+
 # 0: quiet mode (domains only)
 # 1: default mode (coloring, grouping)
 # 2: raw mode
@@ -15,9 +16,6 @@ $print_urls = 1;
 # $url_trunc_first = "path";
 $url_trunc_first = "balanced";
 
-$group_really_long_urls = 0;
-$really_long_thres = 100;
-
 $debug = 0;
 $tcp_only = 0;
 $wait_quiet = 0;
@@ -25,6 +23,12 @@ $key_mode = 1;  # default now
 $show_agent = 0;
 $show_legend = 0;
 $warn_ok = 0;
+
+# set of url types to group (img, css, js)
+%group_types = ("img" => 1, "css" => 1);
+
+$group_really_long_urls = 0;
+$really_long_thres = 100;
 
 ###################################################
 
@@ -42,12 +46,14 @@ sub usage
     print "  -l            show legend.\n";
     print "  -q            quiet mode. Don't log urls, only domains.\n";
     print "  -r            raw url mode. just dump it all, no url coloring, grouping or truncating.\n";
-    print "  -v            debug mode (use twice for more).\n";
+    print "  -v            be verbose. (use twice for more).\n";
+    print "  -g js,img,css specify the set of url types affected by grouping.\n";
+    print "  -g all        shortcut for -g img,js,css.\n";
+    print "  -g none       disable grouping.\n";
     print "  --tcp-only    track tcp connections only (no urls)\n";
     print "                will show which IP addresses are actually being contacted,\n";
     print "                useful to check whether a remote proxy is really being used or not.\n";
     print "  --warn-ok     allow grouping of urls with warnings (ref, post)\n";
-    print "\n";
     print "  --version     show version.\n";
     exit(1);
 }
@@ -105,6 +111,12 @@ for (; @ARGV != 0; shift(@ARGV))
 	$interval = $ARGV[0];
 	next;
     }
+    if ($ARGV[0] eq "-g")
+    {
+	shift(@ARGV);
+	parse_group_set($ARGV[0]);
+	next;
+    }
     if ($ARGV[0] eq "-w")
     {
 	$wait_quiet = 1;
@@ -140,9 +152,18 @@ for (; @ARGV != 0; shift(@ARGV))
     usage();
 }
 
+sub parse_group_set
+{
+    my ($set) = @_;
+    $group_types{js}  = ($set =~ m/js/  || $set eq "all");
+    $group_types{img} = ($set =~ m/img/ || $set eq "all");
+    $group_types{css} = ($set =~ m/css/ || $set eq "all");
+}
+
 sub key_mode_prompt
 {
-    print "buffering requests, press ENTER to display "
+    print "buffering requests, press ENTER to display ";
+    if ($debug) { print "\n"; }
 }
 
 # Make stdout line buffered.
@@ -157,7 +178,7 @@ elsif ($wait_quiet)
 else
 { print ", display every ${interval}s.\n\n"; }
 
-key_mode_prompt() if ($key_mode);
+if ($key_mode) { key_mode_prompt(); }
 
 ##############################################################
 # read input from terminal
@@ -306,12 +327,19 @@ sub leaked_referer
     return 0;
 }
 
-# can url be grouped with others (hidden) ?
-# not if grouping would hide a warning (and --warn-ok wasn't used)
-# or url is suspiciously long.
+# can url be grouped with others (ie hidden) ?
 sub can_group_url
 {
-    my ($path, $warning) = @_;
+    my ($type, $path, $file, $warning) = @_;
+    
+    if ((!$group_types{$type}) ||     # we don't group this type (js/img/css)
+	($type eq "img" && !$file =~ m/\.(png|jpg|jpeg|gif|ico)$/i) ||
+	($type eq "css" && !$file =~ m/\.(css)$/i) ||
+	($type eq "js"  && !$file =~ m/\.(js)$/i) )
+    { return 0; }
+    
+    # ... not if grouping would hide a warning (and --warn-ok wasn't used)
+    # or url is suspiciously long.
     return (($warn_ok || !$warning) &&
 	    ($group_really_long_urls || length($path) < $really_long_thres));
 }
@@ -329,7 +357,7 @@ sub url_header
 		($method eq "POST" ? "post" : ""));
     # display user agent ?    
     my $agent_str = ($show_agent ? sprintf("[%i]", $user_agent_nos{$agent}) : "");
-    die("urlgulp: shouldn't happen, unknown user agent!") if (!$user_agent_nos{$agent});
+    die("urlgulp: shouldn't happen, unknown user agent: '$agent'") if (!$user_agent_nos{$agent});
     
     $head = sprintf("%-8s %s%s", $head, $agent_str, $url_spc);
     $head = sprintf("%.*s", length($url_spc), $head);
@@ -347,8 +375,8 @@ sub url_header
 sub pretty_print_url
 {
     my ($host) = @_;
-    # display summary for images and css
-    my $images = 0, $css = 0;
+    # summary for grouped urls (js, images and css)
+    my $js = 0, $images = 0, $css = 0;
     foreach my $req (@{$req_by_host{$host}})
     { 
 	my ($path, $referer, $method, $agent) = split(/\|/, $req);
@@ -362,13 +390,12 @@ sub pretty_print_url
 	my ($dir, $file, $tail) = ($1, $2, $3);
 	my $line = "$head$path";
 	
-	# image and css grouping
-	if ($file =~ m/\.(png|jpg|jpeg|gif|ico)$/i &&
-	    can_group_url($path, $warning))
-	{   $images++; next; }
-	
-	if ($file =~ m/\.(css)$/i &&
-	    can_group_url($path, $warning))
+	# js, image and css grouping
+	if (can_group_url("js", $path, $file, $warning))
+	{   $js++; next; }
+	if (can_group_url("img", $path, $file, $warning))
+	{   $images++; next; }	
+	if (can_group_url("css", $path, $file, $warning))
 	{   $css++; next; }
 
         # truncate urls to fit term's width.
@@ -387,6 +414,8 @@ sub pretty_print_url
     }
 
     # grouped stuff summary.
+    if ($js)
+    { printf("${url_spc}[$color{wb}javascript$color{e}: $js]\n"); }
     if ($images)
     { printf("${url_spc}[$color{wb}images$color{e}: $images]\n"); }
     if ($css)
@@ -520,18 +549,21 @@ sub print_reqs
 	    $host = $1;
 	    $port = ":$2";
 	}
-
+	
 	# print host. 3rd party domain -> red color
 	my ($color_in, $color_out) = ($color{yb}, $color{e});
 	if (get_domain($host) ne $current_domain)
 	{ ($color_in, $color_out) = ($color{rb}, $color{e}); }	
-
+	
 	my $s = sprintf("%30s%-6s [$n]%s", $host, $port, get_dns_aliases($host));
 	printf("%s%s%s\n", $color_in, $s, $color_out);
-
+	
+	# non http connection, nothing else to print.
+	if ($port ne "") { next; }
+	
 	if ($print_urls == 1)
 	{ pretty_print_url($host); }
-
+	
 	if ($print_urls == 2)
 	{ raw_print_url($host); }
     }
@@ -550,6 +582,12 @@ $SIG{ALRM} = sub { print_reqs(); };
 sub add_request
 {
     my ($host, $path, $referer, $method, $agent) = @_;
+
+    # FIXME: don't print HTTP here when it's a TCP connection on another port ...
+    if ($debug) { printf("HTTP %s %s/%s\n", $method, $host, $path); }
+    if ($debug >= 2 && $referer ne "-") { printf("  referer: %s\n", $referer); }
+    if ($debug >= 2 && $agent ne "-") { printf("  agent  : %s\n", $agent); }
+    
     if (!$req_by_host{$host})
     { push(@servers, $host); }
     push(@{$req_by_host{$host}}, "$path|$referer|$method|$agent");
@@ -557,7 +595,7 @@ sub add_request
 
     if ($key_mode)
     { 
-	print ".";
+	if (!$debug) { print "."; }
 	return; 
     }
 
@@ -604,7 +642,6 @@ while (my $s = <IN>)
 	$s =~ m|"(POST) http://([^/]*)(/[^ ]*) HTTP[^"]*" - - "([^"]*)" "([^"]*)"|)
     {
 	my ($method, $host, $path, $referer, $agent) = ($1, $2, $3, $4, $5);
-	#printf("%s|%s|%s\n", $host, $path, $referer, $method);
 	add_request($host, $path, $referer, $method, $agent);
 	next;
     }
@@ -708,14 +745,16 @@ while (my $s = <IN>)
 	next;
     }
 
-    # messages we can safely ignore (FIXME: show in debug mode ?)
-    if ($s =~ m|^tcpdump: verbose output suppressed|  ||
-	$s =~ m|^listening on .*, capture size 500 bytes|  ||
-	$s =~ m|^urlsnarf: listening on|)
+    # messages we can safely ignore
+    if ($debug < 2 &&
+	($s =~ m|^tcpdump: verbose output suppressed|  ||
+	 $s =~ m|^listening on .*, capture size 500 bytes|  ||
+	 $s =~ m|^urlsnarf: listening on|))
     { next; }
 
     ##############################################################
-    
+
+    # something we couldn't parse. shouldn't happen... show it!
     print $s;
 }
 
