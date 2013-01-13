@@ -24,6 +24,7 @@ $wait_quiet = 0;
 $key_mode = 1;  # default now
 $show_agent = 0;
 $show_legend = 0;
+$warn_ok = 0;
 
 ###################################################
 
@@ -45,6 +46,8 @@ sub usage
     print "  --tcp-only    track tcp connections only (no urls)\n";
     print "                will show which IP addresses are actually being contacted,\n";
     print "                useful to check whether a remote proxy is really being used or not.\n";
+    print "  --warn-ok     allow grouping of urls with warnings (ref, post)\n";
+    print "\n";
     print "  --version     show version.\n";
     exit(1);
 }
@@ -78,6 +81,11 @@ for (; @ARGV != 0; shift(@ARGV))
     if ($ARGV[0] eq "--tcp-only")
     {
 	$tcp_only = 1;
+	next;
+    }
+    if ($ARGV[0] eq "--warn-ok")
+    {
+	$warn_ok = 1;
 	next;
     }
     if ($ARGV[0] eq "--version")
@@ -299,11 +307,12 @@ sub leaked_referer
 }
 
 # can url be grouped with others (hidden) ?
-# not if grouping would hide a warning, or url is suspiciously long.
+# not if grouping would hide a warning (and --warn-ok wasn't used)
+# or url is suspiciously long.
 sub can_group_url
 {
     my ($path, $warning) = @_;
-    return (!$warning &&               
+    return (($warn_ok || !$warning) &&
 	    ($group_really_long_urls || length($path) < $really_long_thres));
 }
 

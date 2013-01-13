@@ -1,8 +1,7 @@
 TODO
 
-- option to allow grouping despite warnings
-- option to disable grouping in default mode
 - option to group js / specify what is grouped
+- option to disable grouping in default mode
 
 - display time
 - global bandwidth usage per interval
