@@ -1,6 +1,32 @@
 #!/usr/bin/perl
 $version = "1.0";
 
+sub usage
+{
+    print "Usage: urlgulp [options] [-i interface]\n\n";
+    print "display mode:\n";
+    print "  -k            wait for key press to display (default).\n";
+    print "  -f            display every interval seconds.\n";
+    print "  -w            display after interval seconds of silence.\n";
+    print "\n";
+    print "other options:\n";
+    print "  -d <interval> set display interval for -f and -w (default: 5s).\n";
+    print "  -u            show user agent used for each request.\n";
+    print "  -l            show legend.\n";
+    print "  -q            quiet mode. Don't log urls, only domains.\n";
+    print "  -r            raw url mode. just dump it all, no url coloring, grouping or truncating.\n";
+    print "  -v            be verbose. (use twice for more).\n";
+    print "  -g js,img,css specify the set of url types affected by grouping.\n";
+    print "  -g all        shortcut for -g img,js,css.\n";
+    print "  -g none       disable grouping.\n";
+    print "  --tcp-only    track tcp connections only (no urls)\n";
+    print "                will show which IP addresses are actually being contacted,\n";
+    print "                useful to check whether a remote proxy is really being used or not.\n";
+    print "  --warn-ok     allow grouping of urls with warnings (ref, post)\n";
+    print "  --version     show version.\n";
+    exit(1);
+}
+
 ###################################################
 # Default Settings
 
@@ -31,32 +57,6 @@ $group_really_long_urls = 0;
 $really_long_thres = 100;
 
 ###################################################
-
-sub usage
-{
-    print "Usage: urlgulp [options] [-i interface]\n\n";
-    print "display mode:\n";
-    print "  -k            wait for key press to display (default).\n";
-    print "  -f            display every interval seconds.\n";
-    print "  -w            display after interval seconds of silence.\n";
-    print "\n";
-    print "other options:\n";
-    print "  -d <interval> set display interval for -f and -w (default: 5s).\n";
-    print "  -u            show user agent used for each request.\n";
-    print "  -l            show legend.\n";
-    print "  -q            quiet mode. Don't log urls, only domains.\n";
-    print "  -r            raw url mode. just dump it all, no url coloring, grouping or truncating.\n";
-    print "  -v            be verbose. (use twice for more).\n";
-    print "  -g js,img,css specify the set of url types affected by grouping.\n";
-    print "  -g all        shortcut for -g img,js,css.\n";
-    print "  -g none       disable grouping.\n";
-    print "  --tcp-only    track tcp connections only (no urls)\n";
-    print "                will show which IP addresses are actually being contacted,\n";
-    print "                useful to check whether a remote proxy is really being used or not.\n";
-    print "  --warn-ok     allow grouping of urls with warnings (ref, post)\n";
-    print "  --version     show version.\n";
-    exit(1);
-}
 
 # ansi color codes
 %color = ( "wb" => "\033[40;37;1m",  # white bold
@@ -209,6 +209,7 @@ my %dns_req;
 my %rev_dns;
 
 my %dns_alias;
+# acceptable domain names as dns aliases (no warning)
 my %filtered_cdns = (
     "akamai.net" => 1,
     "akadns.net" => 1, 
@@ -245,17 +246,18 @@ my %filtered_cdns = (
 ###############################################################################
 # display summary
 
-my %req_by_host;
+my %req_by_host;		   # array of requests for each host
+				   # requests are arrays: ($path, $referer, $method, $agent)
 my @servers;			   # servers in request order
-my $chunk_begin = 1;
+my $chunk_begin = 1;		   # we're at beginning of a new interval
 
-# for accounting only:
+# for accounting only ("DNS:" line before each output)
 my %dns_requests;                  # dns requests in the interval (by req no.)
 my %dns_hosts;			   # hosts requested (all time)
 my %dns_hosts_before;		   # hosts requested (all time) before interval
 my %dns_hosts_interval;            # hosts requested in the interval
 
-my %user_agent_nos;		   # number corresponding to each user agent (all time)
+my %user_agent_nos;		   # indices for user agents (all time)
 
 sub max
 {
@@ -379,8 +381,8 @@ sub pretty_print_url
     my $js = 0, $images = 0, $css = 0;
     foreach my $req (@{$req_by_host{$host}})
     { 
-	my ($path, $referer, $method, $agent) = split(/\|/, $req);
-
+	my ($path, $referer, $method, $agent) = @{$req};
+	
         # head: stuff displayed to the left of the url.
         # warning: head contains a warning (don't group then!)
 	my ($head, $warning) = url_header($referer, $method, $agent);
@@ -428,7 +430,7 @@ sub raw_print_url
     my ($host) = @_;
     foreach my $req (@{$req_by_host{$host}})
     {
-	my ($path, $referer, $method, $agent) = split(/\|/, $req);
+	my ($path, $referer, $method, $agent) = @{$req};
 
         # head: stuff displayed to the left of the url.
         # warning: head contains a warning
@@ -542,7 +544,7 @@ sub print_reqs
 
     foreach my $host (@servers)
     {
-	my $n = @{$req_by_host{$host}};
+	my $n = @{$req_by_host{$host}};  # number of requests
 	my $port = "";
 	if ($host =~ m|(.*):(.*)|)
 	{
@@ -581,7 +583,8 @@ $SIG{ALRM} = sub { print_reqs(); };
 
 sub add_request
 {
-    my ($host, $path, $referer, $method, $agent) = @_;
+     my ($host, $path, $referer, $method, $agent) = @_;
+     my @req = ($path, $referer, $method, $agent);
 
     # FIXME: don't print HTTP here when it's a TCP connection on another port ...
     if ($debug) { printf("HTTP %s %s/%s\n", $method, $host, $path); }
@@ -590,7 +593,7 @@ sub add_request
     
     if (!$req_by_host{$host})
     { push(@servers, $host); }
-    push(@{$req_by_host{$host}}, "$path|$referer|$method|$agent");
+    push(@{$req_by_host{$host}}, \@req);
     add_user_agent($agent);
 
     if ($key_mode)
