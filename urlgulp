@@ -347,20 +347,20 @@ sub pretty_print_url
         # head: stuff displayed to the left of the url.
         # warning: head contains a warning (don't group then!)
 	my ($head, $warning) = url_header($referer, $method, $agent);
-	
-	# image and css grouping
-	if ($path =~ m/\.(png|jpg|jpeg|gif|ico)$/i &&
-	    can_group_url($path, $warning))
-	{   $images++; next; }
-	
-	if ($path =~ m/\.(css)$/i &&
-	    can_group_url($path, $warning))
-	{   $css++; next; }
 
 	# parse pathname part of the url into dir, file and tail
 	$path =~ m|^([^?&:]*)/([^/?&:]*)(.*)$| || die("should not happen: '$path'");
 	my ($dir, $file, $tail) = ($1, $2, $3);
 	my $line = "$head$path";
+	
+	# image and css grouping
+	if ($file =~ m/\.(png|jpg|jpeg|gif|ico)$/i &&
+	    can_group_url($path, $warning))
+	{   $images++; next; }
+	
+	if ($file =~ m/\.(css)$/i &&
+	    can_group_url($path, $warning))
+	{   $css++; next; }
 
         # truncate urls to fit term's width.
 	if (length("$line") > $columns)
