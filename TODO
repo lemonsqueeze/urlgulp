@@ -1,6 +1,38 @@
 TODO
 
-- sort hosts: current domain first.
+README:
+
+- typical use, how it works
+- limitations:
+  how "main" url is determined
+  intermingled of traffic (different hosts, browsers, simul requests)
+  ssl, 
+  stuff it can't see (cookies etc)
+  live capture only
+  
+- examples
+- pretty: use bold, or pictures ?
+
+--------------------------------------------
+
+- rename grouping -> folding
+- dump mode: kindof what debug mode does now
+- url display:
+  --dont-truncate (or set number of columns)
+  --no-colors
+  --no-url-header ?
+- keep raw mode then ?
+  equiv --no-colors --dont-truncate --no-url-header ?
+
+- option to filter out one user agent
+- separate display for different user agents ?
+- by default show user agent sticking out
+
+- network mode ! use urlsnarf src ip etc
+  - option to select src ip to monitor
+  - show different ips talking,
+    select which one to display at run time
+
 - display time
 - global bandwidth usage per interval
 
@@ -28,11 +60,11 @@ TODO
 - load/save dns tables so we can restart easily without losing dns cache ?
 
 -----------------------------------------------------------
-Fixme!
+Fixme
 
 - react to SIGWINCH
 
-- finish debug mode, only printing dns stuff right now
+- finish debug mode, (non http)
 
 - check how ajax shows up
 
@@ -40,6 +72,8 @@ Fixme!
   (wired.com, not even finding aliases with orange!)
   (reverse lookup not even working with orange !!)
   Do some checks on startup ?
+
+- fix warnings
 
 ------------------------------------------------------------
 hard (rewrite)

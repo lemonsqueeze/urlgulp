@@ -23,6 +23,8 @@ sub usage
     print "                will show which IP addresses are actually being contacted,\n";
     print "                useful to check whether a remote proxy is really being used or not.\n";
     print "  --warn-ok     allow grouping of urls with warnings (ref, post)\n";
+    print "  --req-order   order hosts as they were first requested.\n";
+    print "                (default: hosts in domain first, third party last)\n";
     print "  --version     show version.\n";
     exit(1);
 }
@@ -49,10 +51,10 @@ $key_mode = 1;  # default now
 $show_agent = 0;
 $show_legend = 0;
 $warn_ok = 0;
+$preserve_req_order = 0;
 
 # set of url types to group (img, css, js)
 %group_types = ("img" => 1, "css" => 1);
-
 $group_really_long_urls = 0;
 $really_long_thres = 100;
 
@@ -92,6 +94,11 @@ for (; @ARGV != 0; shift(@ARGV))
     if ($ARGV[0] eq "--warn-ok")
     {
 	$warn_ok = 1;
+	next;
+    }
+    if ($ARGV[0] eq "--req-order")
+    {
+	$preserve_req_order = 1;
 	next;
     }
     if ($ARGV[0] eq "--version")
@@ -350,7 +357,7 @@ sub can_group_url
 #         warning: head contains a warning (don't group then!)
 sub url_header
 {
-    my ($referer, $method, $agent) = @_;
+    my ($host, $referer, $method, $agent) = @_;
     my $leaked_ref = leaked_referer($host, $referer);
     my $warning = ($leaked_ref || $method eq "POST");
     
@@ -374,7 +381,7 @@ sub url_header
 #   file                                foo.js
 #   tail                                      ?abcd=efgh
 
-sub pretty_print_url
+sub pretty_print_urls
 {
     my ($host) = @_;
     # summary for grouped urls (js, images and css)
@@ -385,7 +392,7 @@ sub pretty_print_url
 	
         # head: stuff displayed to the left of the url.
         # warning: head contains a warning (don't group then!)
-	my ($head, $warning) = url_header($referer, $method, $agent);
+	my ($head, $warning) = url_header($host, $referer, $method, $agent);
 
 	# parse pathname part of the url into dir, file and tail
 	$path =~ m|^([^?&:]*)/([^/?&:]*)(.*)$| || die("should not happen: '$path'");
@@ -425,7 +432,7 @@ sub pretty_print_url
 }
 
 # barebones display, no highlighing, no coloring, no truncating.
-sub raw_print_url
+sub raw_print_urls
 {
     my ($host) = @_;
     foreach my $req (@{$req_by_host{$host}})
@@ -434,7 +441,7 @@ sub raw_print_url
 
         # head: stuff displayed to the left of the url.
         # warning: head contains a warning
-	my ($head, $warning) = url_header($referer, $method, $agent);
+	my ($head, $warning) = url_header($host, $referer, $method, $agent);
 	
 	print "$head$path\n";
     }
@@ -533,42 +540,71 @@ sub print_legend
     printf("%s\n$a$b%s\n", "-" x $columns, "-" x $columns);
 }
 
+sub print_host_line
+{
+    my ($host, $port, $nreq) = @_;
+    
+    # print host. third party -> red
+    my ($color_in, $color_out) = ($color{yb}, $color{e});
+    if (get_domain($host) ne $current_domain)
+    { ($color_in, $color_out) = ($color{rb}, $color{e}); }	
+    
+    my $s = sprintf("%30s%-6s [$nreq]%s", $host, $port, get_dns_aliases($host));
+    printf("%s%s%s\n", $color_in, $s, $color_out);
+}
 
+# display one host
+sub print_reqs_host
+{
+    my ($host) = @_;
+    my $nreq = @{$req_by_host{$host}};  # number of requests
+    my $port = "";
+    if ($host =~ m|(.*):(.*)|)
+    {
+	$host = $1;
+	$port = ":$2";
+    }
+    
+    print_host_line($host, $port, $nreq);
+    
+    # non http connection, nothing else to print.
+    if ($port ne "") { return; }
+    
+    if ($print_urls == 1)
+    { pretty_print_urls($host); }
+    
+    if ($print_urls == 2)
+    { raw_print_urls($host); }
+}
+
+# first loop through hosts in domain, then third party.
+sub print_reqs_3pe_last
+{
+    # display hosts in current domain first
+    my @in = grep { get_domain($_) eq $current_domain }  @servers;
+    foreach my $host (@in)
+    {	print_reqs_host($host);  }
+
+    # then third party stuff
+    my @out = grep { get_domain($_) ne $current_domain }  @servers;
+    foreach my $host (@out)
+    {	print_reqs_host($host);  }
+}
+
+# print everything
 sub print_reqs
 {
-    my $current_domain = get_domain($servers[0]);
-
+    $current_domain = get_domain($servers[0]);	 # global
+    
     print_user_agents() if ($show_agent);
     print_legend() if ($show_legend);
     print_dns_reqs();
 
-    foreach my $host (@servers)
-    {
-	my $n = @{$req_by_host{$host}};  # number of requests
-	my $port = "";
-	if ($host =~ m|(.*):(.*)|)
-	{
-	    $host = $1;
-	    $port = ":$2";
-	}
-	
-	# print host. 3rd party domain -> red color
-	my ($color_in, $color_out) = ($color{yb}, $color{e});
-	if (get_domain($host) ne $current_domain)
-	{ ($color_in, $color_out) = ($color{rb}, $color{e}); }	
-	
-	my $s = sprintf("%30s%-6s [$n]%s", $host, $port, get_dns_aliases($host));
-	printf("%s%s%s\n", $color_in, $s, $color_out);
-	
-	# non http connection, nothing else to print.
-	if ($port ne "") { next; }
-	
-	if ($print_urls == 1)
-	{ pretty_print_url($host); }
-	
-	if ($print_urls == 2)
-	{ raw_print_url($host); }
-    }
+    if ($preserve_req_order)
+    {  map  { print_reqs_host($_) }  @servers;  }
+    else
+    {  print_reqs_3pe_last(); }
+    
     print "\n";
     key_mode_prompt() if ($key_mode);
     
