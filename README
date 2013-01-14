@@ -1,37 +1,48 @@
                              urlgulp
                              =======
 
- privacy tool - pretty print urls requests from http traffic on the network
+              [ http requests sniffer for fun and privacy ]
 -----------------------------------------------------------------------------
 
-urlgulp's goal is to make it easy to answer questions like:
-  "what happens on the network when browsing site foo.com ?"
-(or any other program for that matter)
+urlgulp started as a quick hack to keep an eye on network activity from
+such moderately trusted entities as browsers. It is basically an http
+sniffer with some dns and tcp capabilities added.
 
-It gives a quick and easy to read summary of network activity around an
-http request, highlighting potential issues with third party content
-(3pe's). opening of non http tcp connections and dns traffic is also
-monitored.
+After each round of capturing requests from the network, it gives
+a quick and easy to read summary of contacted hosts, together with
+associated requests. It also highlights potential privacy issues and
+unwanted traffic:
+ - third party domains involved (red, evil)
+ - referer leaked to outside domain
+ - dns aliases to other domains
+ - non http connections (host:port is shown)
 
-At the end of each interval (time or key press based) requests are grouped
-by host and highlighted, with pictures and css collapsed by default for
-clarity. 
-
-It makes it easy to visualize:
-- third party domains involved
-- url query strings
-- javascript resources loaded
-- leaked referrer
-- use of dns aliases to 3rd party domain
-- post requests
-- user agent used
+features include:
+ - folding of similar requests (images, css) to keep things short
+ - pretty printing of urls (coloring based on file types, truncating)
+ - dns requests summary
+ - user agent display
+ - and other goodies ...
 
 
-Installation:
-- dependencies: perl, tcpdump, urlsnarf (dsniff)
+[ limitations ]
+
+It's currently well suited for use on a single computer where traffic can be
+kept to a minimum, so that requests from different sources don't get
+mixed up together. Support for filtering / monitoring different sources may
+come one day.
+
+Content of ssl traffic isn't known, so no urls there (connection will show
+up as host:https)
+
+
+[ installation ]
+
+- dependencies: perl, tcpdump, urlsnarf (dsniff package)
 - run as root.
 
------------------------------------------------------------------------------
+
+[ usage ]
 
 Usage: urlgulp [options] [-i interface]
 
@@ -46,54 +57,18 @@ other options:
   -l            show legend.
   -q            quiet mode. Don't log urls, only domains.
   -r            raw url mode. just dump it all, no url coloring, grouping or truncating.
-  -v            debug mode (use twice for more).
+  -v            be verbose. (use twice for more).
+  -g js,img,css specify the set of url types affected by grouping.
+  -g all        shortcut for -g img,js,css.
+  -g none       disable grouping.
   --tcp-only    track tcp connections only (no urls)
                 will show which IP addresses are actually being contacted,
                 useful to check whether a remote proxy is really being used or not.
+  --warn-ok     allow grouping of urls with warnings (ref, post)
+  --req-order   order hosts as they were first requested.
+                (default: hosts in domain first, third party last)
   --version     show version.
 
------------------------------------------------------------------------------
-Sample screenshots (no color)
 
-                  slashdot.org       [3]
-                      /
-                      [images: 2]
-                    a.fsdn.com       [23]
-                      /sd/classic.css?release_20130107
-                      /sd/classic/img/twitter_24.png?1
-                      [images: 21]
+[ examples ]
 
------------------------------------------------------------------------------
-
-DNS:12 (6 dup)
-                     wired.com       [1]
-                    /
-                 www.wired.com       [58]
-                    /
-                    /css/global.css?v=20121120a
-                    /css/global_nav.css?v=20121120a
-                    /css/xrail.css?v=20121120a
-                    /js/cn-fe-common/jquery-1.7.2.min.js
-                    /js/cn.minified.js?v=20121120a
-                    /js/global.js?v=20121120a
-                    /js/global_nav.js?v=20121120a
-                    /css/global_ecom.css?v=20121120a
-                    /js/ecom/ecomfw.min.js
-                    /css/global_nav.css?v=20121120a
-                    /js/lazy-load/jquery.sonar.min.js
-                    /js/lazy-load/lazy-load.js
-                    /js/socialmedia_init.js?v=20121120a
-                    /js/scrolldock/scrolldock.js?v=20121120a
-                    /design/wp-content/uploads/2013/01/20130106185613-pinoccio-wireless-wifi-microcontroller-200x100.jpg
-                    [images: 36]
-                cdn.mobify.com       [1]
-ref!                /sites/wired/production/a.js
-           fonts.condenast.com       [1]
-ref!                /ztc8lol.js
-               howto.wired.com       [4]
-ref!                /mediawiki/images/LightPainting_200x100.jpg
-ref!                /mediawiki/images/AppleMalware200x100.jpg
-ref!                /mediawiki/images/Wires200x100.jpg
-ref!                /mediawiki/images/Wires200x100.jpg
-             static.reddit.com       [1]                      = s3.amazonaws.com, s3.a-geo.amazonaws.com, s3-1.amazonaws.com
-ref!                /wired.js

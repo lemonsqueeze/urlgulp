@@ -1,4 +1,6 @@
 #!/usr/bin/perl
+use List::Util qw(reduce);
+
 $version = "1.0";
 
 sub usage
@@ -278,6 +280,12 @@ sub min
     return ($a < $b ? $a : $b);
 }
 
+sub len
+{
+    my ($a) = @_;
+    return length($a);
+}
+
 sub get_domain
 {
     my ($h) = @_;
@@ -394,8 +402,9 @@ sub pretty_print_urls
         # warning: head contains a warning (don't group then!)
 	my ($head, $warning) = url_header($host, $referer, $method, $agent);
 
-	# parse pathname part of the url into dir, file and tail
-	$path =~ m|^([^?&:]*)/([^/?&:]*)(.*)$| || die("should not happen: '$path'");
+	# parse pathname part of the url into dir, file and tail.
+	# (make sure file highlighting pattern below matches)
+	$path =~ m|^([\w-./]*)/([\w-.]*)(.*)$| || die("should not happen: '$path'");
 	my ($dir, $file, $tail) = ($1, $2, $3);
 	my $line = "$head$path";
 	
@@ -414,7 +423,7 @@ sub pretty_print_urls
 	# highlight file
 	my $file_color = $color{wb};
 	$file_color = $color{bb} if ($file =~ m|\.js|);
-	$line =~ s|^([^?&:]*)/([^/?&:]*)(.*)$|$1/$file_color$2$color{e}$3|;
+	$line =~ s|^(.*)/([\w-.]*)(.*)$|$1/$file_color$2$color{e}$3|;
 
 	# highlight warnings in $head now that we don't interfere with formatting.
 	$line =~ s/ref!/$color{rb}ref!$color{e}/;
@@ -549,7 +558,14 @@ sub print_host_line
     if (get_domain($host) ne $current_domain)
     { ($color_in, $color_out) = ($color{rb}, $color{e}); }	
     
-    my $s = sprintf("%30s%-6s [$nreq]%s", $host, $port, get_dns_aliases($host));
+    # truncate host (max: half screen)
+    my $spc = min(max($longest_host, 30), int($columns / 2));
+    if (length($host) > $spc)
+    {
+	my $len = $spc - 8;		# "    [..]" part
+	$host = "[..]" . substr($host, max(len($host) - $len, 0), $len);
+    }
+    my $s = sprintf("%*s%-6s [$nreq]%s", $spc, $host, $port, get_dns_aliases($host));
     printf("%s%s%s\n", $color_in, $s, $color_out);
 }
 
@@ -561,8 +577,8 @@ sub print_reqs_host
     my $port = "";
     if ($host =~ m|(.*):(.*)|)
     {
-	$host = $1;
-	$port = ":$2";
+	($host, $port) = ($1, $2);
+	$port = ($2 == 443 ? ":https" : ":$port");
     }
     
     print_host_line($host, $port, $nreq);
@@ -594,7 +610,9 @@ sub print_reqs_3pe_last
 # print everything
 sub print_reqs
 {
-    $current_domain = get_domain($servers[0]);	 # global
+    # globals
+    $current_domain = get_domain($servers[0]);
+    $longest_host   = reduce {max($a, $b)} map {len($_)} @servers;
     
     print_user_agents() if ($show_agent);
     print_legend() if ($show_legend);

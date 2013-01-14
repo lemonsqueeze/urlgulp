@@ -17,6 +17,10 @@ README:
 --------------------------------------------
 main:
 
+- sort domains
+- group identical urls!
+- option to group urls which differ only in tail ?
+
 - rename grouping -> folding
 - dump mode: kinda what debug mode does now
 - url display:
@@ -35,6 +39,8 @@ main:
 
 ---------------------------------------------------
 serious fun:
+
+- type in commands at run time to change settings!
 
 - option to filter out one user agent
 - display traffic for different user agents separately ?
@@ -86,6 +92,9 @@ fixme:
   Do some checks on startup ?
 
 - fix warnings
+
+- fails to highlight file:
+ref!                [..]MRT/jview/42976713/direct;vt.1;wi.300;hi.600/
 
 ------------------------------------------------------------
 hard: (rewrite)
