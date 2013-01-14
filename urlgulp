@@ -69,10 +69,14 @@ $really_long_thres = 100;
 	   "pb" => "\033[40;35;1m",  # purple bold
 	   "bb" => "\033[40;34;1m",  # blue bold
 	   "cb" => "\033[40;36;1m",  # cyan bold
+	   "r"  => "\033[40;31m",     # red 
+	   "y"  => "\033[40;33m",     # yellow 
 	   "e" => "\033[0m");
 
 # terminal width
 my $columns = `tput cols`;
+$SIG{WINCH} = sub { $columns = `tput cols`; };
+
 # amount of space displayed in front of each url.
 my $url_spc = "                    ";
 
@@ -554,19 +558,25 @@ sub print_host_line
     my ($host, $port, $nreq) = @_;
     
     # print host. third party -> red
-    my ($color_in, $color_out) = ($color{yb}, $color{e});
+    my ($cin, $cinb, $cout) = ($color{y}, $color{yb}, $color{e});
     if (get_domain($host) ne $current_domain)
-    { ($color_in, $color_out) = ($color{rb}, $color{e}); }	
+    {  ($cin, $cinb, $cout) = ($color{r}, $color{rb}, $color{e}); }
     
     # truncate host (max: half screen)
-    my $spc = min(max($longest_host, 30), int($columns / 2));
+    #my $spc = min(max($longest_host, 30), int($columns / 2));
+    my $spc = 30;
     if (length($host) > $spc)
     {
-	my $len = $spc - 8;		# "    [..]" part
+	my $len = $spc - len("    [..]");
 	$host = "[..]" . substr($host, max(len($host) - $len, 0), $len);
     }
-    my $s = sprintf("%*s%-6s [$nreq]%s", $spc, $host, $port, get_dns_aliases($host));
-    printf("%s%s%s\n", $color_in, $s, $color_out);
+    
+    my $d = get_domain($host);
+    my $h = substr($host, 0, len($host) - len($d));
+    $spc = " " x ($spc - len($host));
+    printf("${cin}%s%s${cinb}%s%-6s [$nreq]%s${cout}\n", 
+	   $spc, $h, $d, $port, get_dns_aliases($host));
+
 }
 
 # display one host
@@ -593,9 +603,14 @@ sub print_reqs_host
     { raw_print_urls($host); }
 }
 
+sub by_domain
+{   get_domain($a) cmp get_domain($b)  }
+
 # first loop through hosts in domain, then third party.
 sub print_reqs_3pe_last
 {
+    @servers = sort by_domain @servers;
+
     # display hosts in current domain first
     my @in = grep { get_domain($_) eq $current_domain }  @servers;
     foreach my $host (@in)

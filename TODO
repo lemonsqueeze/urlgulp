@@ -1,27 +1,36 @@
-TODO
+--------------------------------=:[ TODO ]:=---------------------------------
 
---------------------------------------------
-README:
 
-- typical use, how it works
-- limitations:
-  how "main" url is determined
-  intermingled of traffic (different hosts, browsers, simul requests)
-  ssl, 
-  stuff it can't see (cookies etc)
-  live capture only
-  
-- examples
-- pretty: use bold, or pictures ?
+---=:[ README ]:=------------------------------------------------------------
 
---------------------------------------------
-main:
+- add examples
 
-- sort domains
+
+---=:[ main ]:=--------------------------------------------------------------
+
+- try under windows
+
+- use different color for tcp port display
+
+display header:
+- show number of requests
+- display time
+- global bandwidth usage per interval
+
+type in commands at run time to change settings!
+- stop cmd in particular,
+- remember last round
+
+folding:
 - group identical urls!
+- group arbitrary extensions ?
 - option to group urls which differ only in tail ?
-
 - rename grouping -> folding
+
+user agent:
+- by default show user agent sticking out
+- option to filter out one user agent
+
 - dump mode: kinda what debug mode does now
 - url display:
   --dont-truncate (or set number of columns)
@@ -30,19 +39,13 @@ main:
 - keep raw mode then ?
   equiv --no-colors --dont-truncate --no-url-header ?
 
-- by default show user agent sticking out
-
-- display time
-- global bandwidth usage per interval
-
 - doc
 
----------------------------------------------------
-serious fun:
+- check how ajax shows up
 
-- type in commands at run time to change settings!
 
-- option to filter out one user agent
+---=:[ serious fun ]:=-------------------------------------------------------
+
 - display traffic for different user agents separately ?
 
 - network mode ! use urlsnarf src ip etc
@@ -60,35 +63,33 @@ serious fun:
     timing tcpdump would have produced, then we can use that instead of live
     capture ...
 
----------------------------------------------------
-low prio:
 
-- option to disable grouping on urls with tails.
-- option to select url truncating logic ?
-- option to set group_really_long_urls and really_long_thres.
-
-- handle / ignore reverse dns lookups ? (ping)
+---=:[ low prio ]:=----------------------------------------------------------
 
 - provide a way to run as normal user ?
     sudo urlcap | urlgulp -i -
+
+- option to disable grouping on urls with tails.
+- option to select url truncating logic
+- option to set group_really_long_urls and really_long_thres.
+
+- handle / ignore reverse dns lookups ? (ping)
 
 - Don't completely trust CNAME records for finding DNS aliases,
   use wildly different ip adr for host in same domain as indicator ?
 
 - load/save dns tables so we can restart easily without losing dns cache ?
 
------------------------------------------------------------
-fixme:
 
-- handle to SIGWINCH
+---=:[ fixme ]:=-------------------------------------------------------------
+
+- fix host highlighting for ip adresses, make all bold
 
 - finish debug mode, (non http)
 
-- check how ajax shows up
-
-- getting very different results using orange DNS and opendns,
-  (wired.com, not even finding aliases with orange!)
-  (reverse lookup not even working with orange !!)
+- getting very different results using some DNS servers
+  wired.com, not even finding aliases with orange,
+  reverse lookup not even working there !
   Do some checks on startup ?
 
 - fix warnings
@@ -96,14 +97,14 @@ fixme:
 - fails to highlight file:
 ref!                [..]MRT/jview/42976713/direct;vt.1;wi.300;hi.600/
 
-------------------------------------------------------------
-hard: (rewrite)
+
+---=:[ pipedream ]:=---------------------------------------------------------
 
 - bandwidth usage for each resource
   -> can check caching
 - ssl traffic
 - cookies, *especially* 3rd party.
-- detect tracking pictures ?
+- detect web bugs ?
 - display proxy for proxied requests ?
 - display params for POST
 - gui frontend ?

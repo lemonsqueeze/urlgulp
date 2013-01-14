@@ -1,48 +1,66 @@
-                             urlgulp
-                             =======
+-------------------------------=:[ urlgulp ]:=-------------------------------
 
-              [ http requests sniffer for fun and privacy ]
------------------------------------------------------------------------------
+
+--------------=:[ http traffic overview for fun and privacy ]:=--------------
 
 urlgulp started as a quick hack to keep an eye on network activity from
 such moderately trusted entities as browsers. It is basically an http
-sniffer with some dns and tcp capabilities added.
+sniffer with some dns and tcp capabilities added. 
 
-After each round of capturing requests from the network, it gives
-a quick and easy to read summary of contacted hosts, together with
-associated requests. It also highlights potential privacy issues and
-unwanted traffic:
- - third party domains involved (red, evil)
+It focuses on giving a quick overview of what's happening, and tries hard not
+to flood you with unnecessary information. Used together with full fledged
+traffic analysis tools like wireshark it can be quite powerfull: you use
+urlgulp to get a big picture of what's happening, before diving in with
+wireshark for really detailed stuff. 
+
+It's quite possible to leave it running in the background as network data
+is processed on the fly and needs not be saved.
+
+Requests are grouped by host to give a structured outlook. To achieve this
+requests are first buffered for the duration of an interval, after which a
+summary of contacted hosts and associated requests is shown. Some potential
+privacy issues and unwanted traffic are also highlighted:
+ - third party domains involved
  - referer leaked to outside domain
- - dns aliases to other domains
- - non http connections (host:port is shown)
+ - dns aliases to other domains (trying to hide use of third parties)
+ - non http connections, for completeness (host:port is shown)
 
 features include:
- - folding of similar requests (images, css) to keep things short
+ - folding of types of requests (images, css, js) to keep things short
  - pretty printing of urls (coloring based on file types, truncating)
- - dns requests summary
+ - summary of dns requests
  - user agent display
  - and other goodies ...
 
 
-[ limitations ]
+---=:[ limitations ]:=-------------------------------------------------------
 
 It's currently well suited for use on a single computer where traffic can be
 kept to a minimum, so that requests from different sources don't get
 mixed up together. Support for filtering / monitoring different sources may
 come one day.
 
-Content of ssl traffic isn't known, so no urls there (connection will show
-up as host:https)
+Keep in mind that content of ssl traffic isn't known, so obviously no urls
+there (connection will show up as host:https).
+
+urlgulp uses passive dns resolution to display hostnames for (non http) tcp
+connections: it listens to dns traffic, and so doesn't have to make its own
+queries. unresolved IPs will show up if it doesn't get a chance to see the
+request (happened before it started, dns cache, plain IP is used ...)
+
+And lastly its view of http traffic is based on what urlsnarf can feed it,
+so there's stuff it can't know about, like cookies for instance.
 
 
-[ installation ]
+---=:[ installation ]:=------------------------------------------------------
 
-- dependencies: perl, tcpdump, urlsnarf (dsniff package)
+linux:
+- make sure dependencies are installed:
+    perl, tcpdump, urlsnarf (dsniff package)
 - run as root.
 
 
-[ usage ]
+---=:[ usage ]:=-------------------------------------------------------------
 
 Usage: urlgulp [options] [-i interface]
 
@@ -70,5 +88,6 @@ other options:
   --version     show version.
 
 
-[ examples ]
+---=:[ examples ]:=----------------------------------------------------------
 
+soon.
