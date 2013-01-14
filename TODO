@@ -1,5 +1,6 @@
 TODO
 
+--------------------------------------------
 README:
 
 - typical use, how it works
@@ -14,9 +15,10 @@ README:
 - pretty: use bold, or pictures ?
 
 --------------------------------------------
+main:
 
 - rename grouping -> folding
-- dump mode: kindof what debug mode does now
+- dump mode: kinda what debug mode does now
 - url display:
   --dont-truncate (or set number of columns)
   --no-colors
@@ -24,19 +26,36 @@ README:
 - keep raw mode then ?
   equiv --no-colors --dont-truncate --no-url-header ?
 
-- option to filter out one user agent
-- separate display for different user agents ?
 - by default show user agent sticking out
+
+- display time
+- global bandwidth usage per interval
+
+- doc
+
+---------------------------------------------------
+serious fun:
+
+- option to filter out one user agent
+- display traffic for different user agents separately ?
 
 - network mode ! use urlsnarf src ip etc
   - option to select src ip to monitor
   - show different ips talking,
     select which one to display at run time
 
-- display time
-- global bandwidth usage per interval
+- column display for different agents/ips ?
+  now this is getting seriously silly...
 
-- doc
+- file mode -> way to use tcpdump capture file as input ?
+  possible but will have to rewrite timing logic.
+  possible workaround in the meantime:
+    if there's a way to "replay" a capture file and get the same output and
+    timing tcpdump would have produced, then we can use that instead of live
+    capture ...
+
+---------------------------------------------------
+low prio:
 
 - option to disable grouping on urls with tails.
 - option to select url truncating logic ?
@@ -47,22 +66,15 @@ README:
 - provide a way to run as normal user ?
     sudo urlcap | urlgulp -i -
 
-- file mode -> way to use tcpdump capture file as input ?
-  possible but will have to rewrite timing logic.
-  possible workaround in the meantime:
-    if there's a way to "replay" a capture file and get the same output and
-    timing tcpdump would have produced, then we can use that instead of live
-    capture ...
-
 - Don't completely trust CNAME records for finding DNS aliases,
   use wildly different ip adr for host in same domain as indicator ?
 
 - load/save dns tables so we can restart easily without losing dns cache ?
 
 -----------------------------------------------------------
-Fixme
+fixme:
 
-- react to SIGWINCH
+- handle to SIGWINCH
 
 - finish debug mode, (non http)
 
@@ -76,7 +88,7 @@ Fixme
 - fix warnings
 
 ------------------------------------------------------------
-hard (rewrite)
+hard: (rewrite)
 
 - bandwidth usage for each resource
   -> can check caching
@@ -85,6 +97,5 @@ hard (rewrite)
 - detect tracking pictures ?
 - display proxy for proxied requests ?
 - display params for POST
-
-
+- gui frontend ?
 

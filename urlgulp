@@ -342,9 +342,9 @@ sub can_group_url
     my ($type, $path, $file, $warning) = @_;
     
     if ((!$group_types{$type}) ||     # we don't group this type (js/img/css)
-	($type eq "img" && !$file =~ m/\.(png|jpg|jpeg|gif|ico)$/i) ||
-	($type eq "css" && !$file =~ m/\.(css)$/i) ||
-	($type eq "js"  && !$file =~ m/\.(js)$/i) )
+	($type eq "img" && !($file =~ m/\.(png|jpg|jpeg|gif|ico)$/i)) ||
+	($type eq "css" && !($file =~ m/\.(css)$/i)) ||
+	($type eq "js"  && !($file =~ m/\.(js)$/i)) )
     { return 0; }
     
     # ... not if grouping would hide a warning (and --warn-ok wasn't used)
