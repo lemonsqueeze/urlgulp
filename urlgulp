@@ -18,8 +18,9 @@ sub usage
     print "  -q              quiet mode. Don't log urls, only domains.\n";
     print "  -r              raw url mode. just dump it all, no url coloring, grouping or truncating.\n";
     print "  -v              be verbose. (use twice for more).\n";
-    print "  -g js,img,css   specify the set of url types affected by grouping.\n";
-    print "  -g all          shortcut for -g img,js,css.\n";
+    print "  -g js,img,css,  specify the set of url types affected by grouping.\n";
+    print "     other        (default: js,img,css)\n";
+    print "  -g all          shortcut for -g img,js,css,other.\n";
     print "  -g none         disable grouping.\n";
     print "  --nogroup-warn  don't group urls with warnings (ref, post)\n";
     print "  --nogroup-long  don't group suspiciously long urls\n";
@@ -179,6 +180,7 @@ sub parse_group_set
     $group_types{js}  = ($set =~ m/js/  || $set eq "all");
     $group_types{img} = ($set =~ m/img/ || $set eq "all");
     $group_types{css} = ($set =~ m/css/ || $set eq "all");
+    $group_types{other} = ($set =~ m/other/ || $set eq "all");
 }
 
 sub key_mode_prompt
@@ -418,7 +420,7 @@ sub print_group
     $head = sprintf("%-8s %s%s", $head, "", $url_spc);
     $head = sprintf("%.*s", length($url_spc), $head);
     $head =~ s/ref!/$color{rb}ref!$color{e}/;
-    printf("%s[$color{wb}%-3s$color{e}: %i]\n", $head, $name, $group->{$name});
+    printf("%s[$color{wb}%-5s$color{e}: %i]\n", $head, $name, $group->{$name});
 }
 
 # Naming:
@@ -455,6 +457,8 @@ sub pretty_print_urls
 	{   $group{img}++; $group{warn_img} |= $warning;  next; }	
 	if (can_group_url("css", $path, $file, $warning))
 	{   $group{css}++; $group{warn_css} |= $warning;  next; }
+	if (can_group_url("other", $path, $file, $warning))
+	{   $group{other}++; $group{warn_other} |= $warning;  next; }
 
         # truncate urls to fit term's width.
 	if (length("$line") > $columns)
@@ -472,7 +476,7 @@ sub pretty_print_urls
     }
 
     # grouped stuff summary.
-    foreach my $g ("js", "img", "css")
+    foreach my $g ("js", "img", "css", "other")
     {  print_group($g, \%group); }
 }
 
