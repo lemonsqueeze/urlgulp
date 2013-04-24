@@ -83,6 +83,8 @@ user agent:
 
 ---=:[ fixme ]:=-------------------------------------------------------------
 
+- fix empty user agent display with https
+
 - fix host highlighting for ip adresses, make all bold
 
 - finish debug mode, (non http)
