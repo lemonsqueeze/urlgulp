@@ -29,6 +29,7 @@ sub usage
     print "                  useful to check whether a remote proxy is really being used or not.\n";
     print "  --req-order     order hosts as they were first requested.\n";
     print "                  (default: hosts in domain first, third party last)\n";
+    print "  --no-dns-warn   Don't display DNS warnings.\n";    
     print "  --version       show version.\n";
     exit(1);
 }
@@ -56,6 +57,7 @@ $show_agent = 0;
 $show_legend = 0;
 $group_warn = 1;
 $group_long = 1;
+$dns_warn = 1;
 $preserve_req_order = 0;
 
 # set of url types to group (img, css, js)
@@ -114,6 +116,11 @@ for (; @ARGV != 0; shift(@ARGV))
     if ($ARGV[0] eq "--req-order")
     {
 	$preserve_req_order = 1;
+	next;
+    }
+    if ($ARGV[0] eq "--no-dns-warn")
+    {
+	$dns_warn = 0;
 	next;
     }
     if ($ARGV[0] eq "--version")
@@ -797,7 +804,7 @@ while (my $s = <IN>)
 	my $host = $dns_req{$reqn};
 	if ($host eq "")
 	{ 
-	    print "WARNING: dns reply with no matching dns request...\n"; 
+	    print "WARNING: dns reply with no matching dns request...\n" if ($dns_warn);
 	    next;
 	}
 	if ($debug) { print "DNS reply   [$reqn] $host: "; }
@@ -835,7 +842,7 @@ while (my $s = <IN>)
     if ($s =~ m|> [0-9.]*\.53: ([0-9]*)\+ AAAA\? (.*)\.|)    
     {
 	my $host = $2;
-	print "WARNING: ipv6 DNS request for $host. I'm not hanlding ipv6!\n";
+	print "WARNING: ipv6 DNS request for $host. I'm not hanlding ipv6!\n" if ($dns_warn);
 	next;
     }
 
